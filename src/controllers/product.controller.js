@@ -3,13 +3,20 @@ const Product = require("../models/product.model");
 const asyncHandler = require("../utils/asyncHandler");
 
 const getProducts = asyncHandler(async (req, res) => {
-  const query = {};
+  const { categoryId } = req.query;
 
-  if (req.query.categoryId) {
-    query.category = req.query.categoryId;
+  if (!categoryId) {
+    res.status(400);
+    throw new Error("categoryId query parameter is required");
   }
 
-  const products = await Product.find(query)
+  const category = await Category.findById(categoryId);
+  if (!category) {
+    res.status(404);
+    throw new Error("Category not found for the provided category ID");
+  }
+
+  const products = await Product.find({ category: categoryId })
     .populate("category", "name image")
     .sort({ createdAt: -1 });
 

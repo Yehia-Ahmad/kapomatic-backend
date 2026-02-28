@@ -61,7 +61,6 @@ Sample category payload:
 ```
 
 ### Products
-- `GET /api/products`
 - `GET /api/products?categoryId=<category_id>`
 - `GET /api/products/:id`
 - `POST /api/products`

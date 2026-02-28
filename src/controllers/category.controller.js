@@ -58,11 +58,7 @@ const deleteCategory = asyncHandler(async (req, res) => {
     throw new Error("Category not found");
   }
 
-  const productCount = await Product.countDocuments({ category: category._id });
-  if (productCount > 0) {
-    res.status(400);
-    throw new Error("Cannot delete category while products are linked to it");
-  }
+  await Product.deleteMany({ category: category._id });
 
   await category.deleteOne();
   res.json({ message: "Category deleted successfully" });
