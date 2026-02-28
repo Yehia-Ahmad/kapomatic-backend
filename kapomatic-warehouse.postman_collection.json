@@ -243,7 +243,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"inventoryCount\": 100,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"retailPrice\": 15,\n  \"soldItemCount\": 10\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"code\": \"WM-001\",\n  \"inventoryCount\": 100,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"retailPrice\": 15,\n  \"soldItemCount\": 10\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products",
@@ -270,7 +270,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"inventoryCount\": 85,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"inventoryCount\": 85,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products/{{productId}}",

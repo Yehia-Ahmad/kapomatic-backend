@@ -37,6 +37,7 @@ const getProductById = asyncHandler(async (req, res) => {
 const createProduct = asyncHandler(async (req, res) => {
   const {
     name,
+    code,
     inventoryCount,
     image,
     imageBase64,
@@ -59,6 +60,7 @@ const createProduct = asyncHandler(async (req, res) => {
 
   const payload = {
     name,
+    code,
     inventoryCount,
     image: imageBase64 !== undefined ? imageBase64 : image,
     category: categoryId,
@@ -103,6 +105,7 @@ const updateProduct = asyncHandler(async (req, res) => {
   }
 
   if (req.body.name !== undefined) product.name = req.body.name;
+  if (req.body.code !== undefined) product.code = req.body.code;
   if (req.body.inventoryCount !== undefined) product.inventoryCount = req.body.inventoryCount;
   if (req.body.imageBase64 !== undefined) {
     product.image = req.body.imageBase64;

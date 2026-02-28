@@ -13,6 +13,7 @@ Backend API for a warehouse system with:
 
 ### Product
 - `name` (required)
+- `code` (required)
 - `inventoryCount` (required)
 - `image` (required, base64 string in raw or data URI format)
 - `categoryId` (required, must exist in categories)
@@ -71,6 +72,7 @@ Sample product payload:
 ```json
 {
   "name": "Wireless Mouse",
+  "code": "WM-001",
   "inventoryCount": 100,
   "imageBase64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA",
   "categoryId": "66b0b7b5a8c197aa0adf1234",
