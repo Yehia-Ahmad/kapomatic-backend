@@ -94,10 +94,13 @@ Sample product payload:
 
 ### Sellings
 - `GET /api/sellings`
+- `GET /api/sellings?categoryId=<category_id>&productId=<product_id>&customerName=<customer_name>&sellingDate=<YYYY-MM-DD>`
 - `GET /api/sellings/:id`
 - `POST /api/sellings`
 - `PUT /api/sellings/:id`
 - `DELETE /api/sellings/:id`
+
+All selling filters are optional and can be combined together.
 
 Sample selling payload:
 ```json

@@ -12,7 +12,7 @@ const getCategoryById = asyncHandler(async (req, res) => {
 
   if (!category) {
     res.status(404);
-    throw new Error("Category not found");
+    throw new Error("الفئة غير موجودة");
   }
 
   res.json(category);
@@ -35,7 +35,7 @@ const updateCategory = asyncHandler(async (req, res) => {
 
   if (!category) {
     res.status(404);
-    throw new Error("Category not found");
+    throw new Error("الفئة غير موجودة");
   }
 
   if (req.body.name !== undefined) category.name = req.body.name;
@@ -55,7 +55,7 @@ const deleteCategory = asyncHandler(async (req, res) => {
 
   if (!category) {
     res.status(404);
-    throw new Error("Category not found");
+    throw new Error("الفئة غير موجودة");
   }
 
   await Product.deleteMany({ category: category._id });

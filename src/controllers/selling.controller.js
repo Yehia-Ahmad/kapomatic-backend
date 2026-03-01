@@ -21,6 +21,21 @@ const parseNonNegativeNumber = (value) => {
   return parsed;
 };
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const getUtcDayRange = (dateValue) => {
+  const parsedDate = new Date(dateValue);
+  if (Number.isNaN(parsedDate.getTime())) return null;
+
+  const startOfDayUtc = new Date(
+    Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate())
+  );
+  const endOfDayUtc = new Date(startOfDayUtc);
+  endOfDayUtc.setUTCDate(endOfDayUtc.getUTCDate() + 1);
+
+  return { startOfDayUtc, endOfDayUtc };
+};
+
 const toSellingHistoryItem = (selling) => ({
   _id: selling._id,
   productId: selling.product,
@@ -40,45 +55,45 @@ const createSelling = asyncHandler(async (req, res) => {
 
   if (!productId) {
     res.status(400);
-    throw new Error("Product ID is required");
+    throw new Error("معرّف المنتج مطلوب");
   }
 
   if (!mongoose.Types.ObjectId.isValid(productId)) {
     res.status(400);
-    throw new Error("Invalid product ID format");
+    throw new Error("تنسيق معرّف المنتج غير صالح");
   }
 
   if (rawQuantity === undefined) {
     res.status(400);
-    throw new Error("Product quantity is required");
+    throw new Error("كمية المنتج مطلوبة");
   }
 
   if (price === undefined) {
     res.status(400);
-    throw new Error("Price is required");
+    throw new Error("السعر مطلوب");
   }
 
   const quantity = parsePositiveInteger(rawQuantity);
   if (quantity === null) {
     res.status(400);
-    throw new Error("Product quantity must be a positive integer");
+    throw new Error("يجب أن تكون كمية المنتج رقمًا صحيحًا موجبًا");
   }
 
   const unitPrice = parseNonNegativeNumber(price);
   if (unitPrice === null) {
     res.status(400);
-    throw new Error("Price must be a non-negative number");
+    throw new Error("يجب أن يكون السعر رقمًا غير سالب");
   }
 
   const product = await Product.findById(productId).populate("category", "name");
   if (!product) {
     res.status(404);
-    throw new Error("Product not found");
+    throw new Error("المنتج غير موجود");
   }
 
   if (product.inventoryCount < quantity) {
     res.status(400);
-    throw new Error("Insufficient inventory for the requested quantity");
+    throw new Error("المخزون غير كافٍ للكمية المطلوبة");
   }
 
   product.inventoryCount -= quantity;
@@ -110,7 +125,77 @@ const createSelling = asyncHandler(async (req, res) => {
 });
 
 const getSellings = asyncHandler(async (req, res) => {
-  const sellings = await Selling.find().sort({ sellingDate: -1, createdAt: -1 });
+  const { categoryId, productId, customerName, sellingDate } = req.query;
+  const sellingQuery = {};
+
+  if (
+    categoryId !== undefined &&
+    (typeof categoryId !== "string" || !mongoose.Types.ObjectId.isValid(categoryId))
+  ) {
+    res.status(400);
+    throw new Error("تنسيق معرّف الفئة غير صالح");
+  }
+
+  if (
+    productId !== undefined &&
+    (typeof productId !== "string" || !mongoose.Types.ObjectId.isValid(productId))
+  ) {
+    res.status(400);
+    throw new Error("تنسيق معرّف المنتج غير صالح");
+  }
+
+  if (customerName !== undefined) {
+    if (typeof customerName !== "string") {
+      res.status(400);
+      throw new Error("تنسيق اسم العميل غير صالح");
+    }
+
+    const normalizedCustomerName = customerName.trim();
+    if (normalizedCustomerName) {
+      sellingQuery.customerName = new RegExp(escapeRegex(normalizedCustomerName), "i");
+    }
+  }
+
+  if (sellingDate !== undefined) {
+    if (typeof sellingDate !== "string") {
+      res.status(400);
+      throw new Error("تنسيق تاريخ البيع غير صالح");
+    }
+
+    const normalizedSellingDate = sellingDate.trim();
+    if (!normalizedSellingDate) {
+      res.status(400);
+      throw new Error("لا يمكن أن يكون معامل الاستعلام sellingDate فارغًا");
+    }
+
+    const dateRange = getUtcDayRange(normalizedSellingDate);
+    if (!dateRange) {
+      res.status(400);
+      throw new Error("تنسيق تاريخ البيع غير صالح");
+    }
+
+    sellingQuery.sellingDate = {
+      $gte: dateRange.startOfDayUtc,
+      $lt: dateRange.endOfDayUtc,
+    };
+  }
+
+  if (categoryId !== undefined || productId !== undefined) {
+    const productFilter = {};
+    if (categoryId !== undefined) productFilter.category = categoryId;
+    if (productId !== undefined) productFilter._id = productId;
+
+    const products = await Product.find(productFilter).select("_id").lean();
+    if (products.length === 0) {
+      return res.json([]);
+    }
+
+    sellingQuery.product = {
+      $in: products.map((product) => product._id),
+    };
+  }
+
+  const sellings = await Selling.find(sellingQuery).sort({ sellingDate: -1, createdAt: -1 });
   res.json(sellings.map(toSellingHistoryItem));
 });
 
@@ -119,7 +204,7 @@ const getSellingById = asyncHandler(async (req, res) => {
 
   if (!selling) {
     res.status(404);
-    throw new Error("Selling record not found");
+    throw new Error("سجل البيع غير موجود");
   }
 
   res.json(toSellingHistoryItem(selling));
@@ -130,7 +215,7 @@ const updateSelling = asyncHandler(async (req, res) => {
 
   if (!selling) {
     res.status(404);
-    throw new Error("Selling record not found");
+    throw new Error("سجل البيع غير موجود");
   }
 
   const rawQuantity = getRawQuantity(req.body);
@@ -139,12 +224,12 @@ const updateSelling = asyncHandler(async (req, res) => {
 
   if (quantityProvided && nextQuantity === null) {
     res.status(400);
-    throw new Error("Product quantity must be a positive integer");
+    throw new Error("يجب أن تكون كمية المنتج رقمًا صحيحًا موجبًا");
   }
 
   if (req.body.productId !== undefined && !mongoose.Types.ObjectId.isValid(req.body.productId)) {
     res.status(400);
-    throw new Error("Invalid product ID format");
+    throw new Error("تنسيق معرّف المنتج غير صالح");
   }
 
   const nextProductId = req.body.productId !== undefined ? req.body.productId : selling.product.toString();
@@ -155,7 +240,7 @@ const updateSelling = asyncHandler(async (req, res) => {
     const currentProduct = await Product.findById(selling.product);
     if (!currentProduct) {
       res.status(404);
-      throw new Error("Current product linked to this selling record was not found");
+      throw new Error("لم يتم العثور على المنتج الحالي المرتبط بسجل البيع هذا");
     }
 
     currentProduct.inventoryCount += selling.quantity;
@@ -172,7 +257,7 @@ const updateSelling = asyncHandler(async (req, res) => {
       await currentProduct.save();
 
       res.status(404);
-      throw new Error("Product not found");
+      throw new Error("المنتج غير موجود");
     }
 
     if (nextProduct.inventoryCount < nextQuantity) {
@@ -181,7 +266,7 @@ const updateSelling = asyncHandler(async (req, res) => {
       await currentProduct.save();
 
       res.status(400);
-      throw new Error("Insufficient inventory for the requested quantity");
+      throw new Error("المخزون غير كافٍ للكمية المطلوبة");
     }
 
     nextProduct.inventoryCount -= nextQuantity;
@@ -196,14 +281,14 @@ const updateSelling = asyncHandler(async (req, res) => {
     const product = await Product.findById(selling.product);
     if (!product) {
       res.status(404);
-      throw new Error("Product linked to this selling record was not found");
+      throw new Error("لم يتم العثور على المنتج المرتبط بسجل البيع هذا");
     }
 
     const quantityDifference = Number(nextQuantity) - Number(selling.quantity);
     if (quantityDifference > 0) {
       if (product.inventoryCount < quantityDifference) {
         res.status(400);
-        throw new Error("Insufficient inventory for the requested quantity");
+        throw new Error("المخزون غير كافٍ للكمية المطلوبة");
       }
 
       product.inventoryCount -= quantityDifference;
@@ -231,7 +316,7 @@ const deleteSelling = asyncHandler(async (req, res) => {
 
   if (!selling) {
     res.status(404);
-    throw new Error("Selling record not found");
+    throw new Error("سجل البيع غير موجود");
   }
 
   const product = await Product.findById(selling.product);

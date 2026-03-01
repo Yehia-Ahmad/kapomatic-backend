@@ -1,15 +1,15 @@
 const errorHandler = (err, req, res, next) => {
   let statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  let message = err.message || "Internal Server Error";
+  let message = err.message || "خطأ داخلي في الخادم";
 
   if (err.name === "CastError") {
     statusCode = 400;
-    message = "Invalid ID format";
+    message = "تنسيق المعرّف غير صالح";
   }
 
   if (err.code === 11000) {
     statusCode = 400;
-    message = "Duplicate value provided";
+    message = "تم إدخال قيمة مكررة";
   }
 
   if (err.name === "ValidationError") {

@@ -9,13 +9,13 @@ const getProducts = asyncHandler(async (req, res) => {
 
   if (!categoryId) {
     res.status(400);
-    throw new Error("categoryId query parameter is required");
+    throw new Error("مطلوب معامل الاستعلام categoryId");
   }
 
   const category = await Category.findById(categoryId);
   if (!category) {
     res.status(404);
-    throw new Error("Category not found for the provided category ID");
+    throw new Error("لم يتم العثور على فئة للمعرّف المقدم");
   }
 
   const products = await Product.find({ category: categoryId })
@@ -30,7 +30,7 @@ const searchProducts = asyncHandler(async (req, res) => {
 
   if (!q) {
     res.status(400);
-    throw new Error("q query parameter is required");
+    throw new Error("مطلوب معامل الاستعلام q");
   }
 
   const searchRegex = new RegExp(escapeRegex(q), "i");
@@ -49,7 +49,7 @@ const getProductById = asyncHandler(async (req, res) => {
 
   if (!product) {
     res.status(404);
-    throw new Error("Product not found");
+    throw new Error("المنتج غير موجود");
   }
 
   res.json(product);
@@ -71,12 +71,12 @@ const createProduct = asyncHandler(async (req, res) => {
   const category = await Category.findById(categoryId);
   if (!category) {
     res.status(404);
-    throw new Error("Category not found for the provided category ID");
+    throw new Error("لم يتم العثور على فئة للمعرّف المقدم");
   }
 
   if (Number(retailPrice) < Number(wholesalePrice)) {
     res.status(400);
-    throw new Error("Retail price must be greater than or equal to wholesale price");
+    throw new Error("يجب أن يكون سعر التجزئة أكبر من أو يساوي سعر الجملة");
   }
 
   const payload = {
@@ -104,14 +104,14 @@ const updateProduct = asyncHandler(async (req, res) => {
 
   if (!product) {
     res.status(404);
-    throw new Error("Product not found");
+    throw new Error("المنتج غير موجود");
   }
 
   if (req.body.categoryId !== undefined) {
     const category = await Category.findById(req.body.categoryId);
     if (!category) {
       res.status(404);
-      throw new Error("Category not found for the provided category ID");
+      throw new Error("لم يتم العثور على فئة للمعرّف المقدم");
     }
     product.category = req.body.categoryId;
   }
@@ -122,7 +122,7 @@ const updateProduct = asyncHandler(async (req, res) => {
 
   if (Number(nextRetail) < Number(nextWholesale)) {
     res.status(400);
-    throw new Error("Retail price must be greater than or equal to wholesale price");
+    throw new Error("يجب أن يكون سعر التجزئة أكبر من أو يساوي سعر الجملة");
   }
 
   if (req.body.name !== undefined) product.name = req.body.name;
@@ -148,7 +148,7 @@ const deleteProduct = asyncHandler(async (req, res) => {
 
   if (!product) {
     res.status(404);
-    throw new Error("Product not found");
+    throw new Error("المنتج غير موجود");
   }
 
   await product.deleteOne();

@@ -5,56 +5,56 @@ const productSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, "Product name is required"],
+      required: [true, "اسم المنتج مطلوب"],
       trim: true,
-      maxlength: [200, "Product name must be at most 200 characters"],
+      maxlength: [200, "يجب ألا يزيد اسم المنتج عن 200 حرف"],
     },
     code: {
       type: String,
-      required: [true, "Product code is required"],
+      required: [true, "كود المنتج مطلوب"],
       trim: true,
-      maxlength: [100, "Product code must be at most 100 characters"],
+      maxlength: [100, "يجب ألا يزيد كود المنتج عن 100 حرف"],
     },
     inventoryCount: {
       type: Number,
-      required: [true, "Product count in inventory is required"],
-      min: [0, "Inventory count cannot be negative"],
+      required: [true, "عدد المنتج في المخزون مطلوب"],
+      min: [0, "عدد المخزون لا يمكن أن يكون سالبًا"],
     },
     image: {
       type: String,
-      required: [true, "Product image is required"],
+      required: [true, "صورة المنتج مطلوبة"],
       trim: true,
       validate: {
         validator: isBase64Image,
         message:
-          "Product image must be a valid base64 string (raw or data URI format)",
+          "يجب أن تكون صورة المنتج سلسلة base64 صالحة (خام أو بصيغة data URI)",
       },
     },
     category: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
-      required: [true, "Category ID is required"],
+      required: [true, "معرّف الفئة مطلوب"],
     },
     wholesalePrice: {
       type: Number,
-      required: [true, "Wholesale price is required"],
-      min: [0, "Wholesale price cannot be negative"],
+      required: [true, "سعر الجملة مطلوب"],
+      min: [0, "سعر الجملة لا يمكن أن يكون سالبًا"],
     },
     retailPrice: {
       type: Number,
-      required: [true, "Retail price is required"],
-      min: [0, "Retail price cannot be negative"],
+      required: [true, "سعر التجزئة مطلوب"],
+      min: [0, "سعر التجزئة لا يمكن أن يكون سالبًا"],
       validate: {
         validator: function validateRetailPrice(value) {
           return value >= this.wholesalePrice;
         },
-        message: "Retail price must be greater than or equal to wholesale price",
+        message: "يجب أن يكون سعر التجزئة أكبر من أو يساوي سعر الجملة",
       },
     },
     soldItemCount: {
       type: Number,
       default: 0,
-      min: [0, "Sold item count cannot be negative"],
+      min: [0, "عدد العناصر المباعة لا يمكن أن يكون سالبًا"],
     },
   },
   { timestamps: true }

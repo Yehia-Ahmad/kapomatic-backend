@@ -354,6 +354,42 @@
           "response": []
         },
         {
+          "name": "Get Sellings With Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sellings?categoryId={{categoryId}}&productId={{productId}}&customerName=Ahmed&sellingDate=2026-02-28",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sellings"
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}"
+                },
+                {
+                  "key": "productId",
+                  "value": "{{productId}}"
+                },
+                {
+                  "key": "customerName",
+                  "value": "Ahmed"
+                },
+                {
+                  "key": "sellingDate",
+                  "value": "2026-02-28"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Get Selling By ID",
           "request": {
             "method": "GET",

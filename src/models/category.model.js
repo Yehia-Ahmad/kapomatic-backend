@@ -5,26 +5,26 @@ const categorySchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, "Category name is required"],
+      required: [true, "اسم الفئة مطلوب"],
       trim: true,
       unique: true,
-      maxlength: [120, "Category name must be at most 120 characters"],
+      maxlength: [120, "يجب ألا يزيد اسم الفئة عن 120 حرف"],
     },
     image: {
       type: String,
-      required: [true, "Category image is required"],
+      required: [true, "صورة الفئة مطلوبة"],
       trim: true,
       validate: {
         validator: isBase64Image,
         message:
-          "Category image must be a valid base64 string (raw or data URI format)",
+          "يجب أن تكون صورة الفئة سلسلة base64 صالحة (خام أو بصيغة data URI)",
       },
     },
     description: {
       type: String,
-      required: [true, "Category description is required"],
+      required: [true, "وصف الفئة مطلوب"],
       trim: true,
-      maxlength: [500, "Category description must be at most 500 characters"],
+      maxlength: [500, "يجب ألا يزيد وصف الفئة عن 500 حرف"],
     },
   },
   { timestamps: true }
