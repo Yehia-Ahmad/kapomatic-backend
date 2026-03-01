@@ -4,6 +4,7 @@ const morgan = require("morgan");
 
 const categoryRoutes = require("./routes/category.routes");
 const productRoutes = require("./routes/product.routes");
+const sellingRoutes = require("./routes/selling.routes");
 const notFound = require("./middlewares/notFound.middleware");
 const errorHandler = require("./middlewares/error.middleware");
 
@@ -19,6 +20,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/sellings", sellingRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

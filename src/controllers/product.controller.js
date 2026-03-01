@@ -2,6 +2,8 @@ const Category = require("../models/category.model");
 const Product = require("../models/product.model");
 const asyncHandler = require("../utils/asyncHandler");
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const getProducts = asyncHandler(async (req, res) => {
   const { categoryId } = req.query;
 
@@ -17,6 +19,25 @@ const getProducts = asyncHandler(async (req, res) => {
   }
 
   const products = await Product.find({ category: categoryId })
+    .populate("category", "name image")
+    .sort({ createdAt: -1 });
+
+  res.json(products);
+});
+
+const searchProducts = asyncHandler(async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+
+  if (!q) {
+    res.status(400);
+    throw new Error("q query parameter is required");
+  }
+
+  const searchRegex = new RegExp(escapeRegex(q), "i");
+
+  const products = await Product.find({
+    $or: [{ code: searchRegex }, { name: searchRegex }],
+  })
     .populate("category", "name image")
     .sort({ createdAt: -1 });
 
@@ -136,6 +157,7 @@ const deleteProduct = asyncHandler(async (req, res) => {
 
 module.exports = {
   getProducts,
+  searchProducts,
   getProductById,
   createProduct,
   updateProduct,

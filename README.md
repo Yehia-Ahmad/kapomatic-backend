@@ -3,6 +3,7 @@
 Backend API for a warehouse system with:
 - `categories`
 - `products` (each product belongs to one category)
+- `sellings` (selling history with inventory deduction)
 
 ## Data Model
 
@@ -20,6 +21,14 @@ Backend API for a warehouse system with:
 - `wholesalePrice` (required)
 - `retailPrice` (required, must be >= wholesale price)
 - `soldItemCount` (optional, defaults to `0`)
+
+### Selling
+- `productId` (required, must exist in products)
+- `customerName` (required)
+- `sellingDate` (required)
+- `quantity` (required, positive integer, can also be sent as `quentity`)
+- `price` (required, non-negative number, price per each sold item)
+- `totalPrice` (auto = `quantity * price`)
 
 ## Setup
 
@@ -63,6 +72,7 @@ Sample category payload:
 
 ### Products
 - `GET /api/products?categoryId=<category_id>`
+- `GET /api/products/search?q=<code_or_part_of_name>`
 - `GET /api/products/:id`
 - `POST /api/products`
 - `PUT /api/products/:id`
@@ -79,5 +89,38 @@ Sample product payload:
   "wholesalePrice": 8.5,
   "retailPrice": 15,
   "soldItemCount": 10
+}
+```
+
+### Sellings
+- `GET /api/sellings`
+- `GET /api/sellings/:id`
+- `POST /api/sellings`
+- `PUT /api/sellings/:id`
+- `DELETE /api/sellings/:id`
+
+Sample selling payload:
+```json
+{
+  "productId": "66b0b7b5a8c197aa0adf1234",
+  "customerName": "Ahmed Ali",
+  "sellingDate": "2026-02-28T10:30:00.000Z",
+  "quantity": 2,
+  "price": 15
+}
+```
+
+Sample selling history item from `GET /api/sellings`:
+```json
+{
+  "_id": "66c8a7f6688b0a2ac9e31234",
+  "productId": "66b0b7b5a8c197aa0adf1234",
+  "productName": "Wireless Mouse",
+  "categoryName": "Electronics",
+  "productQuantity": 2,
+  "sellingDate": "2026-02-28T10:30:00.000Z",
+  "customerName": "Ahmed Ali",
+  "productPricePerEach": 15,
+  "totalPrice": 30
 }
 ```

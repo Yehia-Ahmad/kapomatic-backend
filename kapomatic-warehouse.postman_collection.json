@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories and products)."
+    "description": "Collection for Warehouse backend APIs (categories, products, and sellings)."
   },
   "item": [
     {
@@ -199,6 +199,31 @@
           "response": []
         },
         {
+          "name": "Search Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/search?q=WM-001",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "WM-001"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Get Product By ID",
           "request": {
             "method": "GET",
@@ -306,6 +331,136 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Sellings",
+      "item": [
+        {
+          "name": "Get All Sellings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sellings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sellings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Selling By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sellings",
+                "{{sellingId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Selling",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"sellingId\", data._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"customerName\": \"Ahmed Ali\",\n  \"sellingDate\": \"2026-02-28T10:30:00.000Z\",\n  \"quantity\": 2,\n  \"price\": 15\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sellings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sellings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Selling",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"Ahmed Mohamed\",\n  \"sellingDate\": \"2026-03-01T11:00:00.000Z\",\n  \"quantity\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sellings",
+                "{{sellingId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Selling",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sellings",
+                "{{sellingId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -319,6 +474,10 @@
     },
     {
       "key": "productId",
+      "value": ""
+    },
+    {
+      "key": "sellingId",
       "value": ""
     }
   ]
