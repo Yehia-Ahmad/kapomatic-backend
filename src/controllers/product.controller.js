@@ -79,10 +79,35 @@ const createProduct = asyncHandler(async (req, res) => {
     throw new Error("يجب أن يكون سعر التجزئة أكبر من أو يساوي سعر الجملة");
   }
 
+  let normalizedInventoryCount = inventoryCount;
+  let normalizedSoldItemCount = soldItemCount;
+
+  if (soldItemCount !== undefined) {
+    normalizedInventoryCount = Number(inventoryCount);
+    normalizedSoldItemCount = Number(soldItemCount);
+
+    if (!Number.isFinite(normalizedInventoryCount) || !Number.isFinite(normalizedSoldItemCount)) {
+      res.status(400);
+      throw new Error("يجب أن تكون قيمتا inventoryCount و soldItemCount أرقامًا صالحة");
+    }
+
+    if (normalizedSoldItemCount < 0) {
+      res.status(400);
+      throw new Error("لا يمكن أن تكون قيمة soldItemCount سالبة");
+    }
+
+    if (normalizedSoldItemCount > normalizedInventoryCount) {
+      res.status(400);
+      throw new Error("لا يمكن أن تكون قيمة soldItemCount أكبر من inventoryCount");
+    }
+
+    normalizedInventoryCount -= normalizedSoldItemCount;
+  }
+
   const payload = {
     name,
     code,
-    inventoryCount,
+    inventoryCount: normalizedInventoryCount,
     image: imageBase64 !== undefined ? imageBase64 : image,
     category: categoryId,
     wholesalePrice,
@@ -90,7 +115,7 @@ const createProduct = asyncHandler(async (req, res) => {
   };
 
   if (soldItemCount !== undefined) {
-    payload.soldItemCount = soldItemCount;
+    payload.soldItemCount = normalizedSoldItemCount;
   }
 
   const product = await Product.create(payload);
