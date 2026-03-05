@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, products, and sellings)."
+    "description": "Collection for Warehouse backend APIs (categories, products, and sellings), updated to match current request fields and filters."
   },
   "item": [
     {
@@ -89,7 +89,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Electronics\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"description\": \"Electronic devices and accessories\"\n}"
+              "raw": "{\n  \"name\": \"Electronics\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/categories",
@@ -116,7 +116,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Electronics\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"description\": \"Updated category description\"\n}"
+              "raw": "{\n  \"name\": \"Updated Electronics\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/categories/{{categoryId}}",
@@ -157,18 +157,24 @@
       "name": "Products",
       "item": [
         {
-          "name": "Get All Products",
+          "name": "Get Products (Required categoryId)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/products",
+              "raw": "{{baseUrl}}/api/products?categoryId={{categoryId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "products"
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}"
+                }
               ]
             }
           },
@@ -268,7 +274,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"code\": \"WM-001\",\n  \"inventoryCount\": 100,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"retailPrice\": 15,\n  \"soldItemCount\": 10\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"code\": \"WM-001\",\n  \"inventoryCount\": 100,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"retailPrice\": 15,\n  \"soldItemCount\": 10,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products",
@@ -295,7 +301,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"newInventory\": 15,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products/{{productId}}",
@@ -359,7 +365,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/sellings?categoryId={{categoryId}}&productId={{productId}}&customerName=Ahmed&sellingDate=2026-02-28",
+              "raw": "{{baseUrl}}/api/sellings?categoryId={{categoryId}}&productId={{productId}}&customerName=Ahmed&customerPhone={{customerPhone}}&sellingDate=2026-02-28",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -379,6 +385,10 @@
                 {
                   "key": "customerName",
                   "value": "Ahmed"
+                },
+                {
+                  "key": "customerPhone",
+                  "value": "{{customerPhone}}"
                 },
                 {
                   "key": "sellingDate",
@@ -434,7 +444,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"customerName\": \"Ahmed Ali\",\n  \"sellingDate\": \"2026-02-28T10:30:00.000Z\",\n  \"quantity\": 2,\n  \"price\": 15\n}"
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"customerName\": \"Ahmed Ali\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-02-28T10:30:00.000Z\",\n  \"quantity\": 2,\n  \"price\": 15\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/sellings",
@@ -461,7 +471,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerName\": \"Ahmed Mohamed\",\n  \"sellingDate\": \"2026-03-01T11:00:00.000Z\",\n  \"quantity\": 3\n}"
+              "raw": "{\n  \"customerName\": \"Ahmed Mohamed\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-01T11:00:00.000Z\",\n  \"quantity\": 3\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",
@@ -515,6 +525,10 @@
     {
       "key": "sellingId",
       "value": ""
+    },
+    {
+      "key": "customerPhone",
+      "value": "01000000000"
     }
   ]
 }

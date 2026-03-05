@@ -25,6 +25,11 @@ const sellingSchema = new mongoose.Schema(
       trim: true,
       maxlength: [200, "يجب ألا يزيد اسم العميل عن 200 حرف"],
     },
+    customerPhone: {
+      type: String,
+      trim: true,
+      maxlength: [30, "يجب ألا يزيد رقم هاتف العميل عن 30 حرف"],
+    },
     sellingDate: {
       type: Date,
       required: [true, "تاريخ البيع مطلوب"],

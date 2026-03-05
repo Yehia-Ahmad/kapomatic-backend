@@ -12,19 +12,12 @@ const categorySchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      required: [true, "صورة الفئة مطلوبة"],
       trim: true,
       validate: {
         validator: isBase64Image,
         message:
           "يجب أن تكون صورة الفئة سلسلة base64 صالحة (خام أو بصيغة data URI)",
       },
-    },
-    description: {
-      type: String,
-      required: [true, "وصف الفئة مطلوب"],
-      trim: true,
-      maxlength: [500, "يجب ألا يزيد وصف الفئة عن 500 حرف"],
     },
   },
   { timestamps: true }

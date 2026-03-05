@@ -79,6 +79,8 @@ const createProduct = asyncHandler(async (req, res) => {
     throw new Error("يجب أن يكون سعر التجزئة أكبر من أو يساوي سعر الجملة");
   }
 
+  const normalizedImage = imageBase64 !== undefined ? imageBase64 : image;
+
   let normalizedInventoryCount = inventoryCount;
   let normalizedSoldItemCount = soldItemCount;
 
@@ -108,11 +110,14 @@ const createProduct = asyncHandler(async (req, res) => {
     name,
     code,
     inventoryCount: normalizedInventoryCount,
-    image: imageBase64 !== undefined ? imageBase64 : image,
     category: categoryId,
     wholesalePrice,
     retailPrice,
   };
+
+  if (normalizedImage !== undefined) {
+    payload.image = normalizedImage;
+  }
 
   if (soldItemCount !== undefined) {
     payload.soldItemCount = normalizedSoldItemCount;

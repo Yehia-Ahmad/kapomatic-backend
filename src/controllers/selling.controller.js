@@ -45,12 +45,13 @@ const toSellingHistoryItem = (selling) => ({
   productQuentity: selling.quantity,
   sellingDate: selling.sellingDate,
   customerName: selling.customerName,
+  customerPhone: selling.customerPhone ?? null,
   productPricePerEach: selling.unitPrice,
   totalPrice: selling.totalPrice,
 });
 
 const createSelling = asyncHandler(async (req, res) => {
-  const { productId, customerName, sellingDate, price } = req.body;
+  const { productId, customerName, customerPhone, sellingDate, price } = req.body;
   const rawQuantity = getRawQuantity(req.body);
 
   if (!productId) {
@@ -72,6 +73,13 @@ const createSelling = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error("السعر مطلوب");
   }
+
+  if (typeof customerPhone !== "string" || !customerPhone.trim()) {
+    res.status(400);
+    throw new Error("رقم هاتف العميل مطلوب");
+  }
+
+  const normalizedCustomerPhone = customerPhone.trim();
 
   const quantity = parsePositiveInteger(rawQuantity);
   if (quantity === null) {
@@ -105,6 +113,7 @@ const createSelling = asyncHandler(async (req, res) => {
     productName: product.name,
     categoryName: product.category ? product.category.name : "Uncategorized",
     customerName,
+    customerPhone: normalizedCustomerPhone,
     sellingDate,
     quantity,
     unitPrice,
@@ -125,7 +134,7 @@ const createSelling = asyncHandler(async (req, res) => {
 });
 
 const getSellings = asyncHandler(async (req, res) => {
-  const { categoryId, productId, customerName, sellingDate } = req.query;
+  const { categoryId, productId, customerName, customerPhone, sellingDate } = req.query;
   const sellingQuery = {};
 
   if (
@@ -153,6 +162,18 @@ const getSellings = asyncHandler(async (req, res) => {
     const normalizedCustomerName = customerName.trim();
     if (normalizedCustomerName) {
       sellingQuery.customerName = new RegExp(escapeRegex(normalizedCustomerName), "i");
+    }
+  }
+
+  if (customerPhone !== undefined) {
+    if (typeof customerPhone !== "string") {
+      res.status(400);
+      throw new Error("تنسيق رقم هاتف العميل غير صالح");
+    }
+
+    const normalizedCustomerPhone = customerPhone.trim();
+    if (normalizedCustomerPhone) {
+      sellingQuery.customerPhone = new RegExp(escapeRegex(normalizedCustomerPhone), "i");
     }
   }
 
@@ -303,6 +324,7 @@ const updateSelling = asyncHandler(async (req, res) => {
   }
 
   if (req.body.customerName !== undefined) selling.customerName = req.body.customerName;
+  if (req.body.customerPhone !== undefined) selling.customerPhone = req.body.customerPhone;
   if (req.body.sellingDate !== undefined) selling.sellingDate = req.body.sellingDate;
   selling.quantity = Number(nextQuantity);
   selling.totalPrice = Number(selling.unitPrice) * Number(selling.quantity);

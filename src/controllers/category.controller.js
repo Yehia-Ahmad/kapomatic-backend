@@ -19,13 +19,18 @@ const getCategoryById = asyncHandler(async (req, res) => {
 });
 
 const createCategory = asyncHandler(async (req, res) => {
-  const { name, image, imageBase64, description } = req.body;
+  const { name, image, imageBase64 } = req.body;
+  const normalizedImage = imageBase64 !== undefined ? imageBase64 : image;
 
-  const category = await Category.create({
+  const categoryData = {
     name,
-    image: imageBase64 !== undefined ? imageBase64 : image,
-    description,
-  });
+  };
+
+  if (normalizedImage !== undefined) {
+    categoryData.image = normalizedImage;
+  }
+
+  const category = await Category.create(categoryData);
 
   res.status(201).json(category);
 });
@@ -44,7 +49,6 @@ const updateCategory = asyncHandler(async (req, res) => {
   } else if (req.body.image !== undefined) {
     category.image = req.body.image;
   }
-  if (req.body.description !== undefined) category.description = req.body.description;
 
   const updatedCategory = await category.save();
   res.json(updatedCategory);

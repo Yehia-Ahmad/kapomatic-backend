@@ -22,7 +22,6 @@ const productSchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      required: [true, "صورة المنتج مطلوبة"],
       trim: true,
       validate: {
         validator: isBase64Image,
