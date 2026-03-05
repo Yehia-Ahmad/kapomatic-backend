@@ -152,7 +152,26 @@ const updateProduct = asyncHandler(async (req, res) => {
 
   if (req.body.name !== undefined) product.name = req.body.name;
   if (req.body.code !== undefined) product.code = req.body.code;
-  if (req.body.inventoryCount !== undefined) product.inventoryCount = req.body.inventoryCount;
+  const newInventoryInput =
+    req.body.newInventory ?? req.body.new_inventory ?? req.body["new inventory"];
+
+  if (newInventoryInput !== undefined) {
+    const parsedNewInventory = Number(newInventoryInput);
+
+    if (!Number.isFinite(parsedNewInventory)) {
+      res.status(400);
+      throw new Error("يجب أن تكون قيمة newInventory رقمًا صالحًا");
+    }
+
+    if (parsedNewInventory < 0) {
+      res.status(400);
+      throw new Error("لا يمكن أن تكون قيمة newInventory سالبة");
+    }
+
+    product.inventoryCount = Number(product.inventoryCount || 0) + parsedNewInventory;
+  } else if (req.body.inventoryCount !== undefined) {
+    product.inventoryCount = req.body.inventoryCount;
+  }
   if (req.body.imageBase64 !== undefined) {
     product.image = req.body.imageBase64;
   } else if (req.body.image !== undefined) {
