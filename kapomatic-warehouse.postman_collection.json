@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, products, and sellings), updated to match current request fields and filters."
+    "description": "Collection for Warehouse backend APIs (categories, products, and sellings), updated to match current request fields and filters. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount."
   },
   "item": [
     {
@@ -231,6 +231,23 @@
         },
         {
           "name": "Get Product By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"productId\", data._id);",
+                  "}",
+                  "if (data && data.inventoryCount !== undefined) {",
+                  "  pm.collectionVariables.set(\"productInventoryCount\", String(data.inventoryCount));",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
@@ -293,6 +310,7 @@
           "name": "Update Product",
           "request": {
             "method": "PUT",
+            "description": "If both inventoryCount and newInventory are sent, newInventory is added only when inventoryCount matches the product's current stored inventoryCount. If they differ, newInventory is ignored.",
             "header": [
               {
                 "key": "Content-Type",
@@ -301,7 +319,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"inventoryCount\": {{productInventoryCount}},\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products/{{productId}}",
@@ -521,6 +539,10 @@
     {
       "key": "productId",
       "value": ""
+    },
+    {
+      "key": "productInventoryCount",
+      "value": "0"
     },
     {
       "key": "sellingId",
