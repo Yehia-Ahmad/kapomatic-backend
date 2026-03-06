@@ -205,12 +205,13 @@
           "response": []
         },
         {
-          "name": "Search Products",
+          "name": "Search By Product Name Or Code",
           "request": {
             "method": "GET",
+            "description": "Use q for one term across both product name and code, or send name and/or code explicitly.",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/products/search?q=WM-001",
+              "raw": "{{baseUrl}}/api/products/search?q={{productSearchTerm}}&name={{productSearchName}}&code={{productSearchCode}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -222,7 +223,15 @@
               "query": [
                 {
                   "key": "q",
-                  "value": "WM-001"
+                  "value": "{{productSearchTerm}}"
+                },
+                {
+                  "key": "name",
+                  "value": "{{productSearchName}}"
+                },
+                {
+                  "key": "code",
+                  "value": "{{productSearchCode}}"
                 }
               ]
             }
@@ -310,7 +319,7 @@
           "name": "Update Product",
           "request": {
             "method": "PUT",
-            "description": "If both inventoryCount and newInventory are sent, newInventory is added only when inventoryCount matches the product's current stored inventoryCount. If they differ, newInventory is ignored.",
+            "description": "Set editProduct to true when editing product details without applying newInventory. If both inventoryCount and newInventory are sent, newInventory is added only when editProduct is not true and inventoryCount matches the product's current stored inventoryCount. If they differ, newInventory is ignored.",
             "header": [
               {
                 "key": "Content-Type",
@@ -319,7 +328,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"inventoryCount\": {{productInventoryCount}},\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"editProduct\": true,\n  \"inventoryCount\": {{productInventoryCount}},\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products/{{productId}}",
@@ -543,6 +552,18 @@
     {
       "key": "productInventoryCount",
       "value": "0"
+    },
+    {
+      "key": "productSearchTerm",
+      "value": ""
+    },
+    {
+      "key": "productSearchName",
+      "value": "Wireless"
+    },
+    {
+      "key": "productSearchCode",
+      "value": "WM-001"
     },
     {
       "key": "sellingId",

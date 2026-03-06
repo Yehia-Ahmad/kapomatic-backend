@@ -3,6 +3,14 @@ const Product = require("../models/product.model");
 const asyncHandler = require("../utils/asyncHandler");
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const isTruthyFlag = (value) => {
+  if (typeof value === "string") {
+    const normalizedValue = value.trim().toLowerCase();
+    return normalizedValue === "true" || normalizedValue === "1";
+  }
+
+  return value === true || value === 1;
+};
 
 const getProducts = asyncHandler(async (req, res) => {
   const { categoryId } = req.query;
@@ -27,17 +35,30 @@ const getProducts = asyncHandler(async (req, res) => {
 
 const searchProducts = asyncHandler(async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const name = typeof req.query.name === "string" ? req.query.name.trim() : "";
+  const code = typeof req.query.code === "string" ? req.query.code.trim() : "";
 
-  if (!q) {
-    res.status(400);
-    throw new Error("مطلوب معامل الاستعلام q");
+  const searchFilters = [];
+
+  if (q) {
+    const searchRegex = new RegExp(escapeRegex(q), "i");
+    searchFilters.push({ code: searchRegex }, { name: searchRegex });
   }
 
-  const searchRegex = new RegExp(escapeRegex(q), "i");
+  if (name) {
+    searchFilters.push({ name: new RegExp(escapeRegex(name), "i") });
+  }
 
-  const products = await Product.find({
-    $or: [{ code: searchRegex }, { name: searchRegex }],
-  })
+  if (code) {
+    searchFilters.push({ code: new RegExp(escapeRegex(code), "i") });
+  }
+
+  if (searchFilters.length === 0) {
+    res.status(400);
+    throw new Error("مطلوب أحد معاملات الاستعلام q أو name أو code");
+  }
+
+  const products = await Product.find({ $or: searchFilters })
     .populate("category", "name image")
     .sort({ createdAt: -1 });
 
@@ -160,11 +181,15 @@ const updateProduct = asyncHandler(async (req, res) => {
   const currentInventoryCount = Number(product.inventoryCount || 0);
   const payloadInventoryCount = req.body.inventoryCount;
   const hasPayloadInventoryCount = payloadInventoryCount !== undefined;
+  const isEditProduct = isTruthyFlag(
+    req.body.editProduct ?? req.body.edit_product ?? req.body["edit product"]
+  );
   const newInventoryInput =
     req.body.newInventory ?? req.body.new_inventory ?? req.body["new inventory"];
 
   if (
     newInventoryInput !== undefined &&
+    !isEditProduct &&
     (!hasPayloadInventoryCount || Number(payloadInventoryCount) === currentInventoryCount)
   ) {
     const parsedNewInventory = Number(newInventoryInput);
