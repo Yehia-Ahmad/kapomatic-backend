@@ -179,18 +179,37 @@ const updateProduct = asyncHandler(async (req, res) => {
   if (req.body.name !== undefined) product.name = req.body.name;
   if (req.body.code !== undefined) product.code = req.body.code;
   const currentInventoryCount = Number(product.inventoryCount || 0);
+  const currentSoldItemCount = Number(product.soldItemCount || 0);
   const payloadInventoryCount = req.body.inventoryCount;
   const hasPayloadInventoryCount = payloadInventoryCount !== undefined;
+  const normalizedPayloadInventoryCount = hasPayloadInventoryCount
+    ? Number(payloadInventoryCount)
+    : currentInventoryCount;
+  const soldItemCountInput = req.body.soldItemCount;
+  const hasSoldItemCount = soldItemCountInput !== undefined;
   const isEditProduct = isTruthyFlag(
     req.body.editProduct ?? req.body.edit_product ?? req.body["edit product"]
   );
   const newInventoryInput =
     req.body.newInventory ?? req.body.new_inventory ?? req.body["new inventory"];
+  let nextInventoryCount = currentInventoryCount;
+
+  if (hasPayloadInventoryCount) {
+    if (!Number.isFinite(normalizedPayloadInventoryCount)) {
+      res.status(400);
+      throw new Error("يجب أن تكون قيمة inventoryCount رقمًا صالحًا");
+    }
+
+    if (normalizedPayloadInventoryCount < 0) {
+      res.status(400);
+      throw new Error("لا يمكن أن تكون قيمة inventoryCount سالبة");
+    }
+  }
 
   if (
     newInventoryInput !== undefined &&
     !isEditProduct &&
-    (!hasPayloadInventoryCount || Number(payloadInventoryCount) === currentInventoryCount)
+    (!hasPayloadInventoryCount || normalizedPayloadInventoryCount === currentInventoryCount)
   ) {
     const parsedNewInventory = Number(newInventoryInput);
 
@@ -204,10 +223,41 @@ const updateProduct = asyncHandler(async (req, res) => {
       throw new Error("لا يمكن أن تكون قيمة newInventory سالبة");
     }
 
-    product.inventoryCount = currentInventoryCount + parsedNewInventory;
+    nextInventoryCount = currentInventoryCount + parsedNewInventory;
   } else if (hasPayloadInventoryCount) {
-    product.inventoryCount = payloadInventoryCount;
+    nextInventoryCount = normalizedPayloadInventoryCount;
   }
+
+  if (hasSoldItemCount) {
+    const normalizedSoldItemCount = Number(soldItemCountInput);
+
+    if (!Number.isFinite(normalizedSoldItemCount)) {
+      res.status(400);
+      throw new Error("يجب أن تكون قيمة soldItemCount رقمًا صالحًا");
+    }
+
+    if (normalizedSoldItemCount < 0) {
+      res.status(400);
+      throw new Error("لا يمكن أن تكون قيمة soldItemCount سالبة");
+    }
+
+    // Rebalance available stock when the edit payload is based on the current stored inventory.
+    const shouldAdjustInventoryForSoldCount =
+      !hasPayloadInventoryCount || normalizedPayloadInventoryCount === currentInventoryCount;
+
+    if (shouldAdjustInventoryForSoldCount) {
+      nextInventoryCount -= normalizedSoldItemCount - currentSoldItemCount;
+    }
+
+    if (nextInventoryCount < 0) {
+      res.status(400);
+      throw new Error("لا يمكن أن تكون قيمة soldItemCount أكبر من إجمالي مخزون المنتج");
+    }
+
+    product.soldItemCount = normalizedSoldItemCount;
+  }
+
+  product.inventoryCount = nextInventoryCount;
   if (req.body.imageBase64 !== undefined) {
     product.image = req.body.imageBase64;
   } else if (req.body.image !== undefined) {
@@ -215,7 +265,6 @@ const updateProduct = asyncHandler(async (req, res) => {
   }
   if (req.body.wholesalePrice !== undefined) product.wholesalePrice = req.body.wholesalePrice;
   if (req.body.retailPrice !== undefined) product.retailPrice = req.body.retailPrice;
-  if (req.body.soldItemCount !== undefined) product.soldItemCount = req.body.soldItemCount;
 
   const updatedProduct = await product.save();
   await updatedProduct.populate("category", "name image");
