@@ -266,7 +266,9 @@ If the server fails or data is lost:
 
     npm install
 
-    pm2 restart kapo-api
+    <!-- pm2 restart kapo-api -->
+    
+    pm2 restart kapo-api --update-env
 
 ------------------------------------------------------------------------
 
