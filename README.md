@@ -2,6 +2,7 @@
 
 Backend API for a warehouse system with:
 - `categories`
+- `customers`
 - `products` (each product belongs to one category)
 - `sellings` (selling history with inventory deduction)
 
@@ -21,6 +22,10 @@ Backend API for a warehouse system with:
 - `wholesalePrice` (required)
 - `retailPrice` (required, must be >= wholesale price)
 - `soldItemCount` (optional, defaults to `0`)
+
+### Customer
+- `name` (required)
+- `phone` (required, unique)
 
 ### Selling
 - `productId` (required, must exist in products)
@@ -91,6 +96,25 @@ Sample product payload:
   "soldItemCount": 10
 }
 ```
+
+### Customers
+- `GET /api/customers`
+- `GET /api/customers?search=<name_or_phone>`
+- `GET /api/customers?name=<customer_name>&phone=<customer_phone>`
+- `GET /api/customers/:id`
+- `POST /api/customers`
+- `PUT /api/customers/:id`
+- `DELETE /api/customers/:id`
+
+Sample customer payload:
+```json
+{
+  "name": "Ahmed Ali",
+  "phone": "+201234567890"
+}
+```
+
+The customer create/update endpoints also accept `customerName` and `customerPhone` as aliases.
 
 ### Sellings
 - `GET /api/sellings`

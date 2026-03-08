@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, products, and sellings), updated to match current request fields and filters. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, and sellings), updated to match current request fields and filters. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount."
   },
   "item": [
     {
@@ -146,6 +146,212 @@
                 "api",
                 "categories",
                 "{{categoryId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Get All Customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "customers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Customers",
+          "request": {
+            "method": "GET",
+            "description": "Use search for one term across both customer name and phone, or send name and/or phone explicitly.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/customers?search={{customerSearchTerm}}&name={{customerSearchName}}&phone={{customerSearchPhone}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "{{customerSearchTerm}}"
+                },
+                {
+                  "key": "name",
+                  "value": "{{customerSearchName}}"
+                },
+                {
+                  "key": "phone",
+                  "value": "{{customerSearchPhone}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Customer By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"customerId\", data._id);",
+                  "}",
+                  "if (data && data.name) {",
+                  "  pm.collectionVariables.set(\"customerName\", data.name);",
+                  "}",
+                  "if (data && data.phone) {",
+                  "  pm.collectionVariables.set(\"customerPhone\", data.phone);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "customers",
+                "{{customerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"customerId\", data._id);",
+                  "}",
+                  "if (data && data.name) {",
+                  "  pm.collectionVariables.set(\"customerName\", data.name);",
+                  "}",
+                  "if (data && data.phone) {",
+                  "  pm.collectionVariables.set(\"customerPhone\", data.phone);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ahmed Ali\",\n  \"phone\": \"+201234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "customers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data && data.name) {",
+                  "  pm.collectionVariables.set(\"customerName\", data.name);",
+                  "}",
+                  "if (data && data.phone) {",
+                  "  pm.collectionVariables.set(\"customerPhone\", data.phone);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ahmed Mohamed\",\n  \"phone\": \"+201234567891\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "customers",
+                "{{customerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Customer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "customers",
+                "{{customerId}}"
               ]
             }
           },
@@ -392,7 +598,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/sellings?categoryId={{categoryId}}&productId={{productId}}&customerName=Ahmed&customerPhone={{customerPhone}}&sellingDate=2026-02-28",
+              "raw": "{{baseUrl}}/api/sellings?categoryId={{categoryId}}&productId={{productId}}&customerName={{customerName}}&customerPhone={{customerPhone}}&sellingDate=2026-02-28",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -411,7 +617,7 @@
                 },
                 {
                   "key": "customerName",
-                  "value": "Ahmed"
+                  "value": "{{customerName}}"
                 },
                 {
                   "key": "customerPhone",
@@ -471,7 +677,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"customerName\": \"Ahmed Ali\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-02-28T10:30:00.000Z\",\n  \"quantity\": 2,\n  \"price\": 15\n}"
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-02-28T10:30:00.000Z\",\n  \"quantity\": 2,\n  \"price\": 15\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/sellings",
@@ -498,7 +704,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerName\": \"Ahmed Mohamed\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-01T11:00:00.000Z\",\n  \"quantity\": 3\n}"
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-01T11:00:00.000Z\",\n  \"quantity\": 3\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",
@@ -546,6 +752,26 @@
       "value": ""
     },
     {
+      "key": "customerId",
+      "value": ""
+    },
+    {
+      "key": "customerName",
+      "value": "Ahmed Ali"
+    },
+    {
+      "key": "customerSearchTerm",
+      "value": ""
+    },
+    {
+      "key": "customerSearchName",
+      "value": "Ahmed"
+    },
+    {
+      "key": "customerSearchPhone",
+      "value": "01000000000"
+    },
+    {
       "key": "productId",
       "value": ""
     },
@@ -571,7 +797,7 @@
     },
     {
       "key": "customerPhone",
-      "value": "01000000000"
+      "value": "+201234567890"
     }
   ]
 }
