@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const Customer = require("../models/customer.model");
 const Product = require("../models/product.model");
 const Selling = require("../models/selling.model");
 const asyncHandler = require("../utils/asyncHandler");
@@ -19,6 +20,15 @@ const parseNonNegativeNumber = (value) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
   return parsed;
+};
+
+const normalizeRequiredString = (value, fieldLabel, res) => {
+  if (typeof value !== "string" || !value.trim()) {
+    res.status(400);
+    throw new Error(`${fieldLabel} مطلوب`);
+  }
+
+  return value.trim();
 };
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -50,6 +60,31 @@ const toSellingHistoryItem = (selling) => ({
   totalPrice: selling.totalPrice,
 });
 
+const ensureCustomerExistsForSelling = async ({ customerName, customerPhone }) => {
+  const existingCustomer = await Customer.findOne({
+    name: customerName,
+    phone: customerPhone,
+  });
+
+  if (existingCustomer) {
+    return existingCustomer;
+  }
+
+  return Customer.findOneAndUpdate(
+    { phone: customerPhone },
+    {
+      $set: { name: customerName },
+      $setOnInsert: { phone: customerPhone },
+    },
+    {
+      new: true,
+      runValidators: true,
+      upsert: true,
+      setDefaultsOnInsert: true,
+    }
+  );
+};
+
 const createSelling = asyncHandler(async (req, res) => {
   const { productId, customerName, customerPhone, sellingDate, price } = req.body;
   const rawQuantity = getRawQuantity(req.body);
@@ -74,12 +109,12 @@ const createSelling = asyncHandler(async (req, res) => {
     throw new Error("السعر مطلوب");
   }
 
-  if (typeof customerPhone !== "string" || !customerPhone.trim()) {
-    res.status(400);
-    throw new Error("رقم هاتف العميل مطلوب");
-  }
-
-  const normalizedCustomerPhone = customerPhone.trim();
+  const normalizedCustomerName = normalizeRequiredString(customerName, "اسم العميل", res);
+  const normalizedCustomerPhone = normalizeRequiredString(
+    customerPhone,
+    "رقم هاتف العميل",
+    res
+  );
 
   const quantity = parsePositiveInteger(rawQuantity);
   if (quantity === null) {
@@ -104,6 +139,11 @@ const createSelling = asyncHandler(async (req, res) => {
     throw new Error("المخزون غير كافٍ للكمية المطلوبة");
   }
 
+  await ensureCustomerExistsForSelling({
+    customerName: normalizedCustomerName,
+    customerPhone: normalizedCustomerPhone,
+  });
+
   product.inventoryCount -= quantity;
   product.soldItemCount = Number(product.soldItemCount || 0) + quantity;
   await product.save();
@@ -112,7 +152,7 @@ const createSelling = asyncHandler(async (req, res) => {
     product: product._id,
     productName: product.name,
     categoryName: product.category ? product.category.name : "Uncategorized",
-    customerName,
+    customerName: normalizedCustomerName,
     customerPhone: normalizedCustomerPhone,
     sellingDate,
     quantity,

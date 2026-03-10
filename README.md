@@ -30,6 +30,7 @@ Backend API for a warehouse system with:
 ### Selling
 - `productId` (required, must exist in products)
 - `customerName` (required)
+- `customerPhone` (required)
 - `sellingDate` (required)
 - `quantity` (required, positive integer, can also be sent as `quentity`)
 - `price` (required, non-negative number, price per each sold item)
@@ -126,11 +127,14 @@ The customer create/update endpoints also accept `customerName` and `customerPho
 
 All selling filters are optional and can be combined together.
 
+When creating a selling, the backend checks the customer by `customerName` and `customerPhone`. If no exact match exists, it creates the customer record. If the phone already exists with a different name, the customer name is updated to match the selling payload.
+
 Sample selling payload:
 ```json
 {
   "productId": "66b0b7b5a8c197aa0adf1234",
   "customerName": "Ahmed Ali",
+  "customerPhone": "+201234567890",
   "sellingDate": "2026-02-28T10:30:00.000Z",
   "quantity": 2,
   "price": 15
