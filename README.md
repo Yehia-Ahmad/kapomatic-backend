@@ -129,30 +129,100 @@ All selling filters are optional and can be combined together.
 
 When creating a selling, the backend checks the customer by `customerName` and `customerPhone`. If no exact match exists, it creates the customer record. If the phone already exists with a different name, the customer name is updated to match the selling payload.
 
-Sample selling payload:
+`POST /api/sellings` accepts either the legacy single-item payload or the new invoice-style payload with one or more entries inside `items`. The backend stores the whole request as a single invoice document, and each line item is kept inside `items`.
+
+Sample bulk selling payload:
 ```json
 {
-  "productId": "66b0b7b5a8c197aa0adf1234",
   "customerName": "Ahmed Ali",
   "customerPhone": "+201234567890",
-  "sellingDate": "2026-02-28T10:30:00.000Z",
-  "quantity": 2,
-  "price": 15
+  "sellingDate": "2026-03-12",
+  "items": [
+    {
+      "productId": "66b0b7b5a8c197aa0adf1234",
+      "quantity": 2,
+      "price": 150
+    },
+    {
+      "productId": "66b0b7b5a8c197aa0adf5678",
+      "quantity": 1,
+      "price": 300
+    }
+  ]
 }
 ```
 
-Sample selling history item from `GET /api/sellings`:
+Sample bulk selling response:
 ```json
 {
-  "_id": "66c8a7f6688b0a2ac9e31234",
-  "productId": "66b0b7b5a8c197aa0adf1234",
-  "productCode": "WM-001",
-  "productName": "Wireless Mouse",
-  "categoryName": "Electronics",
-  "productQuantity": 2,
-  "sellingDate": "2026-02-28T10:30:00.000Z",
+  "_id": "67d0b7b5a8c197aa0adf9999",
+  "invoiceId": "67d0b7b5a8c197aa0adf9999",
   "customerName": "Ahmed Ali",
-  "productPricePerEach": 15,
-  "totalPrice": 30
+  "customerPhone": "+201234567890",
+  "sellingDate": "2026-03-12T00:00:00.000Z",
+  "itemCount": 2,
+  "totalQuantity": 3,
+  "totalPrice": 600,
+  "items": [
+    {
+      "_id": "67d0b7b5a8c197aa0adf1111",
+      "invoiceId": "67d0b7b5a8c197aa0adf9999",
+      "productId": "66b0b7b5a8c197aa0adf1234",
+      "productName": "Wireless Mouse",
+      "categoryName": "Electronics",
+      "productQuantity": 2,
+      "productQuentity": 2,
+      "sellingDate": "2026-03-12T00:00:00.000Z",
+      "customerName": "Ahmed Ali",
+      "customerPhone": "+201234567890",
+      "productPricePerEach": 150,
+      "totalPrice": 300
+    },
+    {
+      "_id": "67d0b7b5a8c197aa0adf2222",
+      "invoiceId": "67d0b7b5a8c197aa0adf9999",
+      "productId": "66b0b7b5a8c197aa0adf5678",
+      "productName": "Keyboard",
+      "categoryName": "Electronics",
+      "productQuantity": 1,
+      "productQuentity": 1,
+      "sellingDate": "2026-03-12T00:00:00.000Z",
+      "customerName": "Ahmed Ali",
+      "customerPhone": "+201234567890",
+      "productPricePerEach": 300,
+      "totalPrice": 300
+    }
+  ]
+}
+```
+
+Sample selling invoice from `GET /api/sellings`:
+```json
+{
+  "_id": "67d0b7b5a8c197aa0adf9999",
+  "invoiceId": "67d0b7b5a8c197aa0adf9999",
+  "customerName": "Ahmed Ali",
+  "customerPhone": "+201234567890",
+  "sellingDate": "2026-03-12T00:00:00.000Z",
+  "itemCount": 2,
+  "totalQuantity": 3,
+  "totalPrice": 600,
+  "items": [
+    {
+      "_id": "67d0b7b5a8c197aa0adf1111",
+      "invoiceId": "67d0b7b5a8c197aa0adf9999",
+      "productId": "66b0b7b5a8c197aa0adf1234",
+      "productCode": "WM-001",
+      "productName": "Wireless Mouse",
+      "categoryName": "Electronics",
+      "productQuantity": 2,
+      "productQuentity": 2,
+      "sellingDate": "2026-03-12T00:00:00.000Z",
+      "customerName": "Ahmed Ali",
+      "customerPhone": "+201234567890",
+      "productPricePerEach": 150,
+      "totalPrice": 300
+    }
+  ]
 }
 ```

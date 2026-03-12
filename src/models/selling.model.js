@@ -1,21 +1,57 @@
 const mongoose = require("mongoose");
 
-const sellingSchema = new mongoose.Schema(
+const sellingItemSchema = new mongoose.Schema(
   {
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
-      required: [true, "معرّف المنتج مطلوب"],
     },
     productName: {
       type: String,
-      required: [true, "اسم المنتج مطلوب"],
       trim: true,
       maxlength: [200, "يجب ألا يزيد اسم المنتج عن 200 حرف"],
     },
     categoryName: {
       type: String,
-      required: [true, "اسم الفئة مطلوب"],
+      trim: true,
+      maxlength: [120, "يجب ألا يزيد اسم الفئة عن 120 حرف"],
+    },
+    quantity: {
+      type: Number,
+      required: [true, "كمية المنتج مطلوبة"],
+      min: [1, "يجب أن تكون كمية المنتج 1 على الأقل"],
+    },
+    unitPrice: {
+      type: Number,
+      required: [true, "سعر المنتج للوحدة مطلوب"],
+      min: [0, "سعر المنتج للوحدة لا يمكن أن يكون سالبًا"],
+    },
+    totalPrice: {
+      type: Number,
+      required: [true, "السعر الإجمالي مطلوب"],
+      min: [0, "السعر الإجمالي لا يمكن أن يكون سالبًا"],
+    },
+  },
+  { _id: true }
+);
+
+const sellingSchema = new mongoose.Schema(
+  {
+    invoiceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      index: true,
+    },
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+    },
+    productName: {
+      type: String,
+      trim: true,
+      maxlength: [200, "يجب ألا يزيد اسم المنتج عن 200 حرف"],
+    },
+    categoryName: {
+      type: String,
       trim: true,
       maxlength: [120, "يجب ألا يزيد اسم الفئة عن 120 حرف"],
     },
@@ -34,14 +70,22 @@ const sellingSchema = new mongoose.Schema(
       type: Date,
       required: [true, "تاريخ البيع مطلوب"],
     },
+    items: {
+      type: [sellingItemSchema],
+      default: undefined,
+    },
+    totalQuantity: {
+      type: Number,
+      min: [0, "إجمالي الكمية لا يمكن أن يكون سالبًا"],
+    },
+
+    // Legacy single-line selling fields kept optional so older records still load correctly.
     quantity: {
       type: Number,
-      required: [true, "كمية المنتج مطلوبة"],
       min: [1, "يجب أن تكون كمية المنتج 1 على الأقل"],
     },
     unitPrice: {
       type: Number,
-      required: [true, "سعر المنتج للوحدة مطلوب"],
       min: [0, "سعر المنتج للوحدة لا يمكن أن يكون سالبًا"],
     },
     totalPrice: {
@@ -52,5 +96,7 @@ const sellingSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+sellingSchema.index({ "items.product": 1 });
 
 module.exports = mongoose.model("Selling", sellingSchema);

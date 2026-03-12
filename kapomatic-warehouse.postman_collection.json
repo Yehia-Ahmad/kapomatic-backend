@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, and sellings), updated to match current request fields and filters. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Create Selling auto-creates or updates the customer by customerName and customerPhone, and Get All Sellings returns productCode."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, and sellings), updated to match current request fields and filters. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Create Selling auto-creates or updates the customer by customerName and customerPhone, stores one invoice document with an items array, and Get All Sellings returns invoice items with productCode."
   },
   "item": [
     {
@@ -575,7 +575,7 @@
       "name": "Sellings",
       "item": [
         {
-          "name": "Get All Sellings",
+          "name": "Get All Selling Invoices",
           "event": [
             {
               "listen": "test",
@@ -584,11 +584,17 @@
                 "exec": [
                   "const data = pm.response.json();",
                   "if (Array.isArray(data) && data.length > 0) {",
-                  "  pm.test(\"Selling list items include productCode\", function () {",
-                  "    pm.expect(data[0]).to.have.property(\"productCode\");",
+                  "  pm.test(\"Selling invoices include item productCode\", function () {",
+                  "    pm.expect(data[0]).to.have.property(\"items\");",
+                  "    if (Array.isArray(data[0].items) && data[0].items.length > 0) {",
+                  "      pm.expect(data[0].items[0]).to.have.property(\"productCode\");",
+                  "    }",
                   "  });",
-                  "  if (data[0].productCode) {",
-                  "    pm.collectionVariables.set(\"productCode\", data[0].productCode);",
+                  "  if (data[0]._id) {",
+                  "    pm.collectionVariables.set(\"sellingId\", data[0]._id);",
+                  "  }",
+                  "  if (Array.isArray(data[0].items) && data[0].items[0] && data[0].items[0].productCode) {",
+                  "    pm.collectionVariables.set(\"productCode\", data[0].items[0].productCode);",
                   "  }",
                   "}"
                 ]
@@ -597,7 +603,7 @@
           ],
           "request": {
             "method": "GET",
-            "description": "Returns selling history. Each selling item includes the productCode field.",
+            "description": "Returns selling invoices. Each invoice item includes the productCode field.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sellings",
@@ -613,7 +619,7 @@
           "response": []
         },
         {
-          "name": "Get Sellings With Filters",
+          "name": "Get Selling Invoices With Filters",
           "request": {
             "method": "GET",
             "header": [],
@@ -653,9 +659,30 @@
           "response": []
         },
         {
-          "name": "Get Selling By ID",
+          "name": "Get Selling Invoice By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Selling invoice response includes items\", function () {",
+                  "  pm.expect(data).to.have.property(\"items\");",
+                  "});",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"sellingId\", data._id);",
+                  "}",
+                  "if (data && Array.isArray(data.items) && data.items[0] && data.items[0].productCode) {",
+                  "  pm.collectionVariables.set(\"productCode\", data.items[0].productCode);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
+            "description": "Returns one selling invoice by invoice document ID.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",
@@ -672,7 +699,7 @@
           "response": []
         },
         {
-          "name": "Create Selling",
+          "name": "Create Selling Invoice",
           "event": [
             {
               "listen": "test",
@@ -680,8 +707,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "const data = pm.response.json();",
-                  "if (data && data._id) {",
-                  "  pm.collectionVariables.set(\"sellingId\", data._id);",
+                  "if (data && (data._id || data.invoiceId)) {",
+                  "  pm.collectionVariables.set(\"sellingId\", data._id || data.invoiceId);",
                   "}"
                 ]
               }
@@ -689,7 +716,7 @@
           ],
           "request": {
             "method": "POST",
-            "description": "Creates a selling record. If no customer exists with the submitted customerName and customerPhone, the backend creates the customer. If the phone already exists with a different name, the customer name is updated.",
+            "description": "Creates a selling invoice with one or more items. If no customer exists with the submitted customerName and customerPhone, the backend creates the customer. If the phone already exists with a different name, the customer name is updated.",
             "header": [
               {
                 "key": "Content-Type",
@@ -698,7 +725,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-02-28T10:30:00.000Z\",\n  \"quantity\": 2,\n  \"price\": 15\n}"
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-12\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"price\": 15\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/sellings",
@@ -714,9 +741,27 @@
           "response": []
         },
         {
-          "name": "Update Selling",
+          "name": "Update Selling Invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Updated selling invoice response includes items\", function () {",
+                  "  pm.expect(data).to.have.property(\"items\");",
+                  "});",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"sellingId\", data._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PUT",
+            "description": "Updates a selling invoice. Send the full items array when replacing invoice lines, especially for invoices that contain more than one item.",
             "header": [
               {
                 "key": "Content-Type",
@@ -725,7 +770,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-01T11:00:00.000Z\",\n  \"quantity\": 3\n}"
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-13\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 3,\n      \"price\": 15\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",
@@ -742,9 +787,10 @@
           "response": []
         },
         {
-          "name": "Delete Selling",
+          "name": "Delete Selling Invoice",
           "request": {
             "method": "DELETE",
+            "description": "Deletes a selling invoice and restores its item quantities back to inventory.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",

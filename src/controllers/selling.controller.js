@@ -10,6 +10,21 @@ const getRawQuantity = (body) => {
   return undefined;
 };
 
+const normalizeSellingDate = (value, res) => {
+  if (value === undefined || value === null || value === "") {
+    res.status(400);
+    throw new Error("تاريخ البيع مطلوب");
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    res.status(400);
+    throw new Error("تنسيق تاريخ البيع غير صالح");
+  }
+
+  return parsedDate;
+};
+
 const parsePositiveInteger = (value) => {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) return null;
@@ -46,42 +61,211 @@ const getUtcDayRange = (dateValue) => {
   return { startOfDayUtc, endOfDayUtc };
 };
 
-const getSellingProductId = (selling) => {
+const getSellingItemProductId = (item) => {
   if (
-    selling.product &&
-    typeof selling.product === "object" &&
-    selling.product._id !== undefined
+    item.product &&
+    typeof item.product === "object" &&
+    item.product._id !== undefined
   ) {
-    return selling.product._id;
+    return item.product._id;
   }
 
-  return selling.product;
+  return item.product;
 };
 
-const toSellingHistoryItem = (selling, options = {}) => {
+const normalizeSellingItems = (body, res) => {
+  if (body.items !== undefined) {
+    if (!Array.isArray(body.items)) {
+      res.status(400);
+      throw new Error("يجب أن تكون items مصفوفة");
+    }
+
+    if (body.items.length === 0) {
+      res.status(400);
+      throw new Error("يجب أن تحتوي items على عنصر واحد على الأقل");
+    }
+
+    return body.items.map((item, index) => {
+      const itemNumber = index + 1;
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        res.status(400);
+        throw new Error(`العنصر رقم ${itemNumber} غير صالح`);
+      }
+
+      const { productId, price } = item;
+      const rawQuantity = getRawQuantity(item);
+
+      if (!productId) {
+        res.status(400);
+        throw new Error(`معرّف المنتج مطلوب في العنصر رقم ${itemNumber}`);
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(productId)) {
+        res.status(400);
+        throw new Error(`تنسيق معرّف المنتج غير صالح في العنصر رقم ${itemNumber}`);
+      }
+
+      if (rawQuantity === undefined) {
+        res.status(400);
+        throw new Error(`كمية المنتج مطلوبة في العنصر رقم ${itemNumber}`);
+      }
+
+      const quantity = parsePositiveInteger(rawQuantity);
+      if (quantity === null) {
+        res.status(400);
+        throw new Error(`يجب أن تكون كمية المنتج رقمًا صحيحًا موجبًا في العنصر رقم ${itemNumber}`);
+      }
+
+      if (price === undefined) {
+        res.status(400);
+        throw new Error(`السعر مطلوب في العنصر رقم ${itemNumber}`);
+      }
+
+      const unitPrice = parseNonNegativeNumber(price);
+      if (unitPrice === null) {
+        res.status(400);
+        throw new Error(`يجب أن يكون السعر رقمًا غير سالب في العنصر رقم ${itemNumber}`);
+      }
+
+      return {
+        productId,
+        quantity,
+        unitPrice,
+      };
+    });
+  }
+
+  const { productId, price } = body;
+  const rawQuantity = getRawQuantity(body);
+
+  if (!productId) {
+    res.status(400);
+    throw new Error("معرّف المنتج مطلوب");
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    res.status(400);
+    throw new Error("تنسيق معرّف المنتج غير صالح");
+  }
+
+  if (rawQuantity === undefined) {
+    res.status(400);
+    throw new Error("كمية المنتج مطلوبة");
+  }
+
+  const quantity = parsePositiveInteger(rawQuantity);
+  if (quantity === null) {
+    res.status(400);
+    throw new Error("يجب أن تكون كمية المنتج رقمًا صحيحًا موجبًا");
+  }
+
+  if (price === undefined) {
+    res.status(400);
+    throw new Error("السعر مطلوب");
+  }
+
+  const unitPrice = parseNonNegativeNumber(price);
+  if (unitPrice === null) {
+    res.status(400);
+    throw new Error("يجب أن يكون السعر رقمًا غير سالب");
+  }
+
+  return [
+    {
+      productId,
+      quantity,
+      unitPrice,
+    },
+  ];
+};
+
+const hasInvoiceItems = (selling) => Array.isArray(selling.items) && selling.items.length > 0;
+
+const getSellingItems = (selling) => {
+  if (hasInvoiceItems(selling)) {
+    return selling.items;
+  }
+
+  if (!selling.product) {
+    return [];
+  }
+
+  return [
+    {
+      _id: selling._id,
+      product: selling.product,
+      productName: selling.productName,
+      categoryName: selling.categoryName,
+      quantity: selling.quantity,
+      unitPrice: selling.unitPrice,
+      totalPrice: selling.totalPrice,
+    },
+  ];
+};
+
+const getInvoiceIdentifier = (selling) => selling.invoiceId ?? selling._id;
+
+const buildInvoiceTotals = (items) => {
+  const totalQuantity = items.reduce(
+    (sum, item) => sum + Number(item.productQuantity ?? item.quantity ?? 0),
+    0
+  );
+  const totalPrice = items.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
+
+  return { totalQuantity, totalPrice };
+};
+
+const toSellingInvoiceItem = (item, selling, options = {}) => {
   const sellingHistoryItem = {
-    _id: selling._id,
-    productId: getSellingProductId(selling),
-    productName: selling.productName,
-    categoryName: selling.categoryName,
-    productQuantity: selling.quantity,
-    productQuentity: selling.quantity,
+    _id: item._id ?? null,
+    invoiceId: getInvoiceIdentifier(selling),
+    productId: getSellingItemProductId(item),
+    productName: item.productName,
+    categoryName: item.categoryName,
+    productQuantity: item.quantity,
+    productQuentity: item.quantity,
     sellingDate: selling.sellingDate,
     customerName: selling.customerName,
     customerPhone: selling.customerPhone ?? null,
-    productPricePerEach: selling.unitPrice,
-    totalPrice: selling.totalPrice,
+    productPricePerEach: item.unitPrice,
+    totalPrice: item.totalPrice,
   };
 
   if (options.includeProductCode) {
     sellingHistoryItem.productCode =
-      selling.product && typeof selling.product === "object" ? selling.product.code ?? null : null;
+      item.product && typeof item.product === "object" ? item.product.code ?? null : null;
   }
 
   return sellingHistoryItem;
 };
 
+const toSellingInvoice = (selling, options = {}) => {
+  const items = getSellingItems(selling).map((item) => toSellingInvoiceItem(item, selling, options));
+  const totals = buildInvoiceTotals(items);
+
+  return {
+    _id: selling._id,
+    invoiceId: getInvoiceIdentifier(selling),
+    customerName: selling.customerName,
+    customerPhone: selling.customerPhone ?? null,
+    sellingDate: selling.sellingDate,
+    itemCount: items.length,
+    totalQuantity: selling.totalQuantity ?? totals.totalQuantity,
+    totalPrice: selling.totalPrice ?? totals.totalPrice,
+    items,
+  };
+};
+
 const ensureCustomerExistsForSelling = async ({ customerName, customerPhone }) => {
+  if (
+    typeof customerName !== "string" ||
+    !customerName.trim() ||
+    typeof customerPhone !== "string" ||
+    !customerPhone.trim()
+  ) {
+    return null;
+  }
+
   const existingCustomer = await Customer.findOne({
     name: customerName,
     phone: customerPhone,
@@ -106,92 +290,177 @@ const ensureCustomerExistsForSelling = async ({ customerName, customerPhone }) =
   );
 };
 
+const toSellingItemInput = (item) => ({
+  productId: getSellingItemProductId(item)?.toString(),
+  quantity: Number(item.quantity),
+  unitPrice: Number(item.unitPrice),
+});
+
+const getSellingItemInputs = (selling) =>
+  getSellingItems(selling)
+    .map(toSellingItemInput)
+    .filter((item) => item.productId);
+
+const buildQuantityByProductId = (items) => {
+  const quantityByProductId = new Map();
+
+  for (const item of items) {
+    const productId = item.productId.toString();
+    quantityByProductId.set(
+      productId,
+      Number(quantityByProductId.get(productId) || 0) + Number(item.quantity)
+    );
+  }
+
+  return quantityByProductId;
+};
+
+const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) => {
+  const currentQuantityByProductId = buildQuantityByProductId(currentItems);
+  const nextQuantityByProductId = buildQuantityByProductId(nextItems);
+  const allProductIds = [...new Set([
+    ...currentQuantityByProductId.keys(),
+    ...nextQuantityByProductId.keys(),
+  ])];
+
+  if (allProductIds.length === 0) {
+    return new Map();
+  }
+
+  const products = await Product.find({ _id: { $in: allProductIds } }).populate("category", "name");
+  const productsById = new Map(products.map((product) => [product._id.toString(), product]));
+  const originalStates = new Map();
+
+  for (const product of products) {
+    originalStates.set(product._id.toString(), {
+      inventoryCount: Number(product.inventoryCount || 0),
+      soldItemCount: Number(product.soldItemCount || 0),
+    });
+  }
+
+  for (const [productId, nextQuantity] of nextQuantityByProductId.entries()) {
+    const product = productsById.get(productId);
+    if (!product) {
+      res.status(404);
+      throw new Error("المنتج غير موجود");
+    }
+
+    const currentQuantity = Number(currentQuantityByProductId.get(productId) || 0);
+    const availableQuantity = Number(product.inventoryCount || 0) + currentQuantity;
+    if (availableQuantity < nextQuantity) {
+      res.status(400);
+      throw new Error(`المخزون غير كافٍ للمنتج ${product.name}`);
+    }
+  }
+
+  try {
+    for (const productId of allProductIds) {
+      const product = productsById.get(productId);
+      if (!product) continue;
+
+      const originalState = originalStates.get(productId);
+      const currentQuantity = Number(currentQuantityByProductId.get(productId) || 0);
+      const nextQuantity = Number(nextQuantityByProductId.get(productId) || 0);
+
+      product.inventoryCount = originalState.inventoryCount + currentQuantity - nextQuantity;
+      product.soldItemCount = Math.max(
+        0,
+        originalState.soldItemCount - currentQuantity + nextQuantity
+      );
+      await product.save();
+    }
+  } catch (error) {
+    for (const productId of allProductIds) {
+      const product = productsById.get(productId);
+      const originalState = originalStates.get(productId);
+      if (!product || !originalState) continue;
+
+      product.inventoryCount = originalState.inventoryCount;
+      product.soldItemCount = originalState.soldItemCount;
+
+      try {
+        await product.save();
+      } catch (_saveError) {
+        // Best-effort rollback only; surface the original failure.
+      }
+    }
+
+    throw error;
+  }
+
+  return productsById;
+};
+
+const buildPersistedItems = (items, productsById) =>
+  items.map((item) => {
+    const product = productsById.get(item.productId.toString());
+
+    return {
+      product: product._id,
+      productName: product.name,
+      categoryName: product.category ? product.category.name : "Uncategorized",
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.unitPrice * item.quantity,
+    };
+  });
+
+const hasLineItemChanges = (body) =>
+  body.items !== undefined ||
+  body.productId !== undefined ||
+  body.price !== undefined ||
+  getRawQuantity(body) !== undefined;
+
 const createSelling = asyncHandler(async (req, res) => {
-  const { productId, customerName, customerPhone, sellingDate, price } = req.body;
-  const rawQuantity = getRawQuantity(req.body);
-
-  if (!productId) {
-    res.status(400);
-    throw new Error("معرّف المنتج مطلوب");
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(productId)) {
-    res.status(400);
-    throw new Error("تنسيق معرّف المنتج غير صالح");
-  }
-
-  if (rawQuantity === undefined) {
-    res.status(400);
-    throw new Error("كمية المنتج مطلوبة");
-  }
-
-  if (price === undefined) {
-    res.status(400);
-    throw new Error("السعر مطلوب");
-  }
-
+  const { customerName, customerPhone } = req.body;
   const normalizedCustomerName = normalizeRequiredString(customerName, "اسم العميل", res);
-  const normalizedCustomerPhone = normalizeRequiredString(
-    customerPhone,
-    "رقم هاتف العميل",
-    res
-  );
-
-  const quantity = parsePositiveInteger(rawQuantity);
-  if (quantity === null) {
-    res.status(400);
-    throw new Error("يجب أن تكون كمية المنتج رقمًا صحيحًا موجبًا");
-  }
-
-  const unitPrice = parseNonNegativeNumber(price);
-  if (unitPrice === null) {
-    res.status(400);
-    throw new Error("يجب أن يكون السعر رقمًا غير سالب");
-  }
-
-  const product = await Product.findById(productId).populate("category", "name");
-  if (!product) {
-    res.status(404);
-    throw new Error("المنتج غير موجود");
-  }
-
-  if (product.inventoryCount < quantity) {
-    res.status(400);
-    throw new Error("المخزون غير كافٍ للكمية المطلوبة");
-  }
+  const normalizedCustomerPhone = normalizeRequiredString(customerPhone, "رقم هاتف العميل", res);
+  const normalizedSellingDate = normalizeSellingDate(req.body.sellingDate, res);
+  const items = normalizeSellingItems(req.body, res);
 
   await ensureCustomerExistsForSelling({
     customerName: normalizedCustomerName,
     customerPhone: normalizedCustomerPhone,
   });
 
-  product.inventoryCount -= quantity;
-  product.soldItemCount = Number(product.soldItemCount || 0) + quantity;
-  await product.save();
-
-  const sellingPayload = {
-    product: product._id,
-    productName: product.name,
-    categoryName: product.category ? product.category.name : "Uncategorized",
-    customerName: normalizedCustomerName,
-    customerPhone: normalizedCustomerPhone,
-    sellingDate,
-    quantity,
-    unitPrice,
-    totalPrice: unitPrice * quantity,
-  };
-
+  const productsById = await applyInventoryForInvoiceChange({
+    currentItems: [],
+    nextItems: items,
+    res,
+  });
+  const persistedItems = buildPersistedItems(items, productsById);
+  const invoiceTotals = buildInvoiceTotals(
+    persistedItems.map((item) => ({
+      productQuantity: item.quantity,
+      totalPrice: item.totalPrice,
+    }))
+  );
   let selling;
+
   try {
-    selling = await Selling.create(sellingPayload);
+    selling = await Selling.create({
+      customerName: normalizedCustomerName,
+      customerPhone: normalizedCustomerPhone,
+      sellingDate: normalizedSellingDate,
+      items: persistedItems,
+      totalQuantity: invoiceTotals.totalQuantity,
+      totalPrice: invoiceTotals.totalPrice,
+    });
   } catch (error) {
-    product.inventoryCount += quantity;
-    product.soldItemCount = Math.max(0, Number(product.soldItemCount || 0) - quantity);
-    await product.save();
+    try {
+      await applyInventoryForInvoiceChange({
+        currentItems: items,
+        nextItems: [],
+        res,
+      });
+    } catch (_rollbackError) {
+      // Best-effort rollback only; surface the create failure.
+    }
+
     throw error;
   }
 
-  res.status(201).json(toSellingHistoryItem(selling));
+  res.status(201).json(toSellingInvoice(selling));
 });
 
 const getSellings = asyncHandler(async (req, res) => {
@@ -272,26 +541,31 @@ const getSellings = asyncHandler(async (req, res) => {
       return res.json([]);
     }
 
-    sellingQuery.product = {
-      $in: products.map((product) => product._id),
-    };
+    const matchingProductIds = products.map((product) => product._id);
+    sellingQuery.$or = [
+      { "items.product": { $in: matchingProductIds } },
+      { product: { $in: matchingProductIds } },
+    ];
   }
 
   const sellings = await Selling.find(sellingQuery)
+    .populate("items.product", "code")
     .populate("product", "code")
     .sort({ sellingDate: -1, createdAt: -1 });
-  res.json(sellings.map((selling) => toSellingHistoryItem(selling, { includeProductCode: true })));
+  res.json(sellings.map((selling) => toSellingInvoice(selling, { includeProductCode: true })));
 });
 
 const getSellingById = asyncHandler(async (req, res) => {
-  const selling = await Selling.findById(req.params.id);
+  const selling = await Selling.findById(req.params.id)
+    .populate("items.product", "code")
+    .populate("product", "code");
 
   if (!selling) {
     res.status(404);
     throw new Error("سجل البيع غير موجود");
   }
 
-  res.json(toSellingHistoryItem(selling));
+  res.json(toSellingInvoice(selling, { includeProductCode: true }));
 });
 
 const updateSelling = asyncHandler(async (req, res) => {
@@ -302,98 +576,111 @@ const updateSelling = asyncHandler(async (req, res) => {
     throw new Error("سجل البيع غير موجود");
   }
 
-  const rawQuantity = getRawQuantity(req.body);
-  const quantityProvided = rawQuantity !== undefined;
-  const nextQuantity = quantityProvided ? parsePositiveInteger(rawQuantity) : selling.quantity;
+  const normalizedCustomerName =
+    req.body.customerName !== undefined
+      ? normalizeRequiredString(req.body.customerName, "اسم العميل", res)
+      : selling.customerName;
+  const normalizedCustomerPhone =
+    req.body.customerPhone !== undefined
+      ? normalizeRequiredString(req.body.customerPhone, "رقم هاتف العميل", res)
+      : selling.customerPhone;
+  const normalizedSellingDate =
+    req.body.sellingDate !== undefined
+      ? normalizeSellingDate(req.body.sellingDate, res)
+      : selling.sellingDate;
 
-  if (quantityProvided && nextQuantity === null) {
-    res.status(400);
-    throw new Error("يجب أن تكون كمية المنتج رقمًا صحيحًا موجبًا");
-  }
+  const shouldUpdateItems = hasLineItemChanges(req.body);
+  const currentItems = getSellingItemInputs(selling);
 
-  if (req.body.productId !== undefined && !mongoose.Types.ObjectId.isValid(req.body.productId)) {
-    res.status(400);
-    throw new Error("تنسيق معرّف المنتج غير صالح");
-  }
+  let nextItems = currentItems;
+  let productsById = new Map();
 
-  const nextProductId = req.body.productId !== undefined ? req.body.productId : selling.product.toString();
-  const isProductChanged = nextProductId.toString() !== selling.product.toString();
-  const isQuantityChanged = Number(nextQuantity) !== Number(selling.quantity);
-
-  if (isProductChanged) {
-    const currentProduct = await Product.findById(selling.product);
-    if (!currentProduct) {
-      res.status(404);
-      throw new Error("لم يتم العثور على المنتج الحالي المرتبط بسجل البيع هذا");
-    }
-
-    currentProduct.inventoryCount += selling.quantity;
-    currentProduct.soldItemCount = Math.max(
-      0,
-      Number(currentProduct.soldItemCount || 0) - Number(selling.quantity)
-    );
-    await currentProduct.save();
-
-    const nextProduct = await Product.findById(nextProductId).populate("category", "name");
-    if (!nextProduct) {
-      currentProduct.inventoryCount -= selling.quantity;
-      currentProduct.soldItemCount = Number(currentProduct.soldItemCount || 0) + Number(selling.quantity);
-      await currentProduct.save();
-
-      res.status(404);
-      throw new Error("المنتج غير موجود");
-    }
-
-    if (nextProduct.inventoryCount < nextQuantity) {
-      currentProduct.inventoryCount -= selling.quantity;
-      currentProduct.soldItemCount = Number(currentProduct.soldItemCount || 0) + Number(selling.quantity);
-      await currentProduct.save();
-
+  if (shouldUpdateItems) {
+    if (req.body.items === undefined && currentItems.length !== 1) {
       res.status(400);
-      throw new Error("المخزون غير كافٍ للكمية المطلوبة");
+      throw new Error("يجب إرسال items لتعديل فاتورة تحتوي على أكثر من عنصر واحد");
     }
 
-    nextProduct.inventoryCount -= nextQuantity;
-    nextProduct.soldItemCount = Number(nextProduct.soldItemCount || 0) + Number(nextQuantity);
-    await nextProduct.save();
-
-    selling.product = nextProduct._id;
-    selling.productName = nextProduct.name;
-    selling.categoryName = nextProduct.category ? nextProduct.category.name : "Uncategorized";
-    selling.unitPrice = nextProduct.retailPrice;
-  } else if (isQuantityChanged) {
-    const product = await Product.findById(selling.product);
-    if (!product) {
-      res.status(404);
-      throw new Error("لم يتم العثور على المنتج المرتبط بسجل البيع هذا");
-    }
-
-    const quantityDifference = Number(nextQuantity) - Number(selling.quantity);
-    if (quantityDifference > 0) {
-      if (product.inventoryCount < quantityDifference) {
+    if (req.body.items !== undefined) {
+      nextItems = normalizeSellingItems(req.body, res);
+    } else {
+      const currentItem = currentItems[0];
+      if (!currentItem) {
         res.status(400);
-        throw new Error("المخزون غير كافٍ للكمية المطلوبة");
+        throw new Error("لا يمكن تعديل عناصر الفاتورة الحالية بهذا الطلب");
       }
 
-      product.inventoryCount -= quantityDifference;
-      product.soldItemCount = Number(product.soldItemCount || 0) + quantityDifference;
-    } else {
-      const restoredQuantity = Math.abs(quantityDifference);
-      product.inventoryCount += restoredQuantity;
-      product.soldItemCount = Math.max(0, Number(product.soldItemCount || 0) - restoredQuantity);
+      nextItems = normalizeSellingItems(
+        {
+          productId:
+            req.body.productId !== undefined ? req.body.productId : currentItem.productId,
+          quantity:
+            getRawQuantity(req.body) !== undefined
+              ? getRawQuantity(req.body)
+              : currentItem.quantity,
+          price: req.body.price !== undefined ? req.body.price : currentItem.unitPrice,
+        },
+        res
+      );
     }
 
-    await product.save();
+    productsById = await applyInventoryForInvoiceChange({
+      currentItems,
+      nextItems,
+      res,
+    });
   }
 
-  if (req.body.customerName !== undefined) selling.customerName = req.body.customerName;
-  if (req.body.customerPhone !== undefined) selling.customerPhone = req.body.customerPhone;
-  if (req.body.sellingDate !== undefined) selling.sellingDate = req.body.sellingDate;
-  selling.quantity = Number(nextQuantity);
-  selling.totalPrice = Number(selling.unitPrice) * Number(selling.quantity);
+  await ensureCustomerExistsForSelling({
+    customerName: normalizedCustomerName,
+    customerPhone: normalizedCustomerPhone,
+  });
 
-  const updatedSelling = await selling.save();
-  res.json(toSellingHistoryItem(updatedSelling));
+  if (shouldUpdateItems) {
+    const persistedItems = buildPersistedItems(nextItems, productsById);
+    const invoiceTotals = buildInvoiceTotals(
+      persistedItems.map((item) => ({
+        productQuantity: item.quantity,
+        totalPrice: item.totalPrice,
+      }))
+    );
+
+    selling.items = persistedItems;
+    selling.totalQuantity = invoiceTotals.totalQuantity;
+    selling.totalPrice = invoiceTotals.totalPrice;
+
+    // Clear legacy top-level line-item fields after converting to invoice storage.
+    selling.product = undefined;
+    selling.productName = undefined;
+    selling.categoryName = undefined;
+    selling.quantity = undefined;
+    selling.unitPrice = undefined;
+  }
+
+  selling.customerName = normalizedCustomerName;
+  selling.customerPhone = normalizedCustomerPhone;
+  selling.sellingDate = normalizedSellingDate;
+
+  let updatedSelling;
+  try {
+    updatedSelling = await selling.save();
+  } catch (error) {
+    if (shouldUpdateItems) {
+      try {
+        await applyInventoryForInvoiceChange({
+          currentItems: nextItems,
+          nextItems: currentItems,
+          res,
+        });
+      } catch (_rollbackError) {
+        // Best-effort rollback only; surface the update failure.
+      }
+    }
+
+    throw error;
+  }
+
+  res.json(toSellingInvoice(updatedSelling));
 });
 
 const deleteSelling = asyncHandler(async (req, res) => {
@@ -404,15 +691,14 @@ const deleteSelling = asyncHandler(async (req, res) => {
     throw new Error("سجل البيع غير موجود");
   }
 
-  const product = await Product.findById(selling.product);
-  if (product) {
-    product.inventoryCount += Number(selling.quantity);
-    product.soldItemCount = Math.max(0, Number(product.soldItemCount || 0) - Number(selling.quantity));
-    await product.save();
-  }
+  await applyInventoryForInvoiceChange({
+    currentItems: getSellingItemInputs(selling),
+    nextItems: [],
+    res,
+  });
 
   await selling.deleteOne();
-  res.json({ message: "Selling record deleted successfully" });
+  res.json({ message: "Selling invoice deleted successfully" });
 });
 
 module.exports = {
