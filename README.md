@@ -146,6 +146,7 @@ Sample selling history item from `GET /api/sellings`:
 {
   "_id": "66c8a7f6688b0a2ac9e31234",
   "productId": "66b0b7b5a8c197aa0adf1234",
+  "productCode": "WM-001",
   "productName": "Wireless Mouse",
   "categoryName": "Electronics",
   "productQuantity": 2,

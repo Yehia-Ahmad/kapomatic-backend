@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, and sellings), updated to match current request fields and filters. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, and sellings), updated to match current request fields and filters. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Create Selling auto-creates or updates the customer by customerName and customerPhone, and Get All Sellings returns productCode."
   },
   "item": [
     {
@@ -576,8 +576,28 @@
       "item": [
         {
           "name": "Get All Sellings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "  pm.test(\"Selling list items include productCode\", function () {",
+                  "    pm.expect(data[0]).to.have.property(\"productCode\");",
+                  "  });",
+                  "  if (data[0].productCode) {",
+                  "    pm.collectionVariables.set(\"productCode\", data[0].productCode);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
+            "description": "Returns selling history. Each selling item includes the productCode field.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sellings",
@@ -669,6 +689,7 @@
           ],
           "request": {
             "method": "POST",
+            "description": "Creates a selling record. If no customer exists with the submitted customerName and customerPhone, the backend creates the customer. If the phone already exists with a different name, the customer name is updated.",
             "header": [
               {
                 "key": "Content-Type",
@@ -773,6 +794,10 @@
     },
     {
       "key": "productId",
+      "value": ""
+    },
+    {
+      "key": "productCode",
       "value": ""
     },
     {

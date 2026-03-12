@@ -46,19 +46,40 @@ const getUtcDayRange = (dateValue) => {
   return { startOfDayUtc, endOfDayUtc };
 };
 
-const toSellingHistoryItem = (selling) => ({
-  _id: selling._id,
-  productId: selling.product,
-  productName: selling.productName,
-  categoryName: selling.categoryName,
-  productQuantity: selling.quantity,
-  productQuentity: selling.quantity,
-  sellingDate: selling.sellingDate,
-  customerName: selling.customerName,
-  customerPhone: selling.customerPhone ?? null,
-  productPricePerEach: selling.unitPrice,
-  totalPrice: selling.totalPrice,
-});
+const getSellingProductId = (selling) => {
+  if (
+    selling.product &&
+    typeof selling.product === "object" &&
+    selling.product._id !== undefined
+  ) {
+    return selling.product._id;
+  }
+
+  return selling.product;
+};
+
+const toSellingHistoryItem = (selling, options = {}) => {
+  const sellingHistoryItem = {
+    _id: selling._id,
+    productId: getSellingProductId(selling),
+    productName: selling.productName,
+    categoryName: selling.categoryName,
+    productQuantity: selling.quantity,
+    productQuentity: selling.quantity,
+    sellingDate: selling.sellingDate,
+    customerName: selling.customerName,
+    customerPhone: selling.customerPhone ?? null,
+    productPricePerEach: selling.unitPrice,
+    totalPrice: selling.totalPrice,
+  };
+
+  if (options.includeProductCode) {
+    sellingHistoryItem.productCode =
+      selling.product && typeof selling.product === "object" ? selling.product.code ?? null : null;
+  }
+
+  return sellingHistoryItem;
+};
 
 const ensureCustomerExistsForSelling = async ({ customerName, customerPhone }) => {
   const existingCustomer = await Customer.findOne({
@@ -256,8 +277,10 @@ const getSellings = asyncHandler(async (req, res) => {
     };
   }
 
-  const sellings = await Selling.find(sellingQuery).sort({ sellingDate: -1, createdAt: -1 });
-  res.json(sellings.map(toSellingHistoryItem));
+  const sellings = await Selling.find(sellingQuery)
+    .populate("product", "code")
+    .sort({ sellingDate: -1, createdAt: -1 });
+  res.json(sellings.map((selling) => toSellingHistoryItem(selling, { includeProductCode: true })));
 });
 
 const getSellingById = asyncHandler(async (req, res) => {
