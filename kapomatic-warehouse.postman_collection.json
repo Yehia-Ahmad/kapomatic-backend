@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, and sellings), updated to match current request fields and filters. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Create Selling auto-creates or updates the customer by customerName and customerPhone, stores one invoice document with an items array, and Get All Sellings returns invoice items with productCode."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, and sellings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, and inventory deduction/restoration. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Create Selling auto-creates or updates the customer by customerName and customerPhone, stores one invoice document with an items array, and Get All Sellings returns invoice items with productCode."
   },
   "item": [
     {
@@ -216,6 +216,19 @@
                 "type": "text/javascript",
                 "exec": [
                   "const data = pm.response.json();",
+                  "pm.test(\"Customer details include credit summary fields\", function () {",
+                  "  pm.expect(data).to.have.property(\"lastCreditSaleDate\");",
+                  "  pm.expect(data).to.have.property(\"lastCashSaleDate\");",
+                  "  pm.expect(data).to.have.property(\"lastCreditSalePaymentDate\");",
+                  "  pm.expect(data).to.have.property(\"creditSummary\");",
+                  "  pm.expect(data.creditSummary).to.have.property(\"debtStatusSummary\");",
+                  "  pm.expect(data.creditSummary).to.have.property(\"totalDebtAmount\");",
+                  "  pm.expect(data.creditSummary).to.have.property(\"paidAmount\");",
+                  "  pm.expect(data.creditSummary).to.have.property(\"remainingAmount\");",
+                  "  pm.expect(data.creditSummary).to.have.property(\"totalRefundDueAmount\");",
+                  "  pm.expect(data.creditSummary).to.have.property(\"totalReturnedPaidAmount\");",
+                  "  pm.expect(data.creditSummary).to.have.property(\"totalReallocatedPaidAmount\");",
+                  "});",
                   "if (data && data._id) {",
                   "  pm.collectionVariables.set(\"customerId\", data._id);",
                   "}",
@@ -224,6 +237,9 @@
                   "}",
                   "if (data && data.phone) {",
                   "  pm.collectionVariables.set(\"customerPhone\", data.phone);",
+                  "}",
+                  "if (data && Array.isArray(data.creditHistory) && data.creditHistory[0] && (data.creditHistory[0]._id || data.creditHistory[0].invoiceId)) {",
+                  "  pm.collectionVariables.set(\"creditSaleId\", data.creditHistory[0]._id || data.creditHistory[0].invoiceId);",
                   "}"
                 ]
               }
@@ -231,6 +247,7 @@
           ],
           "request": {
             "method": "GET",
+            "description": "Returns customer details plus lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, creditSummary, and creditHistory. creditSummary includes debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/customers/{{customerId}}",
@@ -333,6 +350,36 @@
                 "api",
                 "customers",
                 "{{customerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Customer Payment",
+          "request": {
+            "method": "POST",
+            "description": "Adds a payment to the customer's first open invoice or last open invoice. Send exactly one of firstInvoice or lastInvoice as true. If lastInvoice is selected and amount exceeds that invoice remainingAmount, the backend distributes the extra amount to the customer's other open invoices in newest-to-oldest order. If amount exceeds the customer's totalRemainingAmount across open invoices, the API returns message, invoiceId, remainingAmount, and totalRemainingAmount.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 25,\n  \"firstInvoice\": false,\n  \"lastInvoice\": true,\n  \"paymentDate\": \"{{creditPaymentDate}}\",\n  \"note\": \"Customer installment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customers/{{customerId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "customers",
+                "{{customerId}}",
+                "payments"
               ]
             }
           },
@@ -564,6 +611,376 @@
                 "api",
                 "products",
                 "{{productId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Credit Sales",
+      "item": [
+        {
+          "name": "Get All Credit Sales",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "  pm.test(\"Credit-sale invoices include debt and refund totals\", function () {",
+                  "    pm.expect(data[0]).to.have.property(\"paidAmount\");",
+                  "    pm.expect(data[0]).to.have.property(\"remainingAmount\");",
+                  "    pm.expect(data[0]).to.have.property(\"refundDueAmount\");",
+                  "    pm.expect(data[0]).to.have.property(\"refundStatus\");",
+                  "    pm.expect(data[0]).to.have.property(\"returnedPaidAmount\");",
+                  "    pm.expect(data[0]).to.have.property(\"reallocatedPaidAmount\");",
+                  "    pm.expect(data[0]).to.have.property(\"payments\");",
+                  "    pm.expect(data[0]).to.have.property(\"refunds\");",
+                  "  });",
+                  "  if (data[0]._id) {",
+                  "    pm.collectionVariables.set(\"creditSaleId\", data[0]._id);",
+                  "  }",
+                  "  if (data[0].status) {",
+                  "    pm.collectionVariables.set(\"creditSaleStatus\", data[0].status);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "description": "Returns all credit-sale invoices with payment, refund, remaining balance, refundDueAmount, returnedPaidAmount, and reallocatedPaidAmount information.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/credit-sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "credit-sales"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Credit Sales With Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/credit-sales?customerId={{customerId}}&customerName={{customerName}}&customerPhone={{customerPhone}}&status={{creditSaleStatus}}&sellingDate={{creditSellingDate}}&dueDate={{creditDueDate}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "credit-sales"
+              ],
+              "query": [
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}"
+                },
+                {
+                  "key": "customerName",
+                  "value": "{{customerName}}"
+                },
+                {
+                  "key": "customerPhone",
+                  "value": "{{customerPhone}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{creditSaleStatus}}"
+                },
+                {
+                  "key": "sellingDate",
+                  "value": "{{creditSellingDate}}"
+                },
+                {
+                  "key": "dueDate",
+                  "value": "{{creditDueDate}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Credit Sale By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Credit-sale invoice includes payment and refund fields\", function () {",
+                  "  pm.expect(data).to.have.property(\"payments\");",
+                  "  pm.expect(data).to.have.property(\"remainingAmount\");",
+                  "  pm.expect(data).to.have.property(\"refunds\");",
+                  "  pm.expect(data).to.have.property(\"refundStatus\");",
+                  "  pm.expect(data).to.have.property(\"returnedPaidAmount\");",
+                  "  pm.expect(data).to.have.property(\"reallocatedPaidAmount\");",
+                  "});",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"creditSaleId\", data._id);",
+                  "}",
+                  "if (data && data.status) {",
+                  "  pm.collectionVariables.set(\"creditSaleStatus\", data.status);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "description": "Returns one credit-sale invoice by invoice document ID, including payments, refunds, remainingAmount, refundDueAmount, returnedPaidAmount, and reallocatedPaidAmount.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/credit-sales/{{creditSaleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "credit-sales",
+                "{{creditSaleId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Credit Sale",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data && (data._id || data.invoiceId)) {",
+                  "  pm.collectionVariables.set(\"creditSaleId\", data._id || data.invoiceId);",
+                  "}",
+                  "if (data && data.customerId) {",
+                  "  pm.collectionVariables.set(\"customerId\", data.customerId);",
+                  "}",
+                  "if (data && data.customerName) {",
+                  "  pm.collectionVariables.set(\"customerName\", data.customerName);",
+                  "}",
+                  "if (data && data.customerPhone) {",
+                  "  pm.collectionVariables.set(\"customerPhone\", data.customerPhone);",
+                  "}",
+                  "if (data && data.status) {",
+                  "  pm.collectionVariables.set(\"creditSaleStatus\", data.status);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Creates a credit-sale invoice, links or creates the customer automatically, deducts inventory, and optionally stores an initial payment.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"{{creditSellingDate}}\",\n  \"dueDate\": \"{{creditDueDate}}\",\n  \"notes\": \"Monthly installment\",\n  \"initialPaidAmount\": 50,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"price\": 15\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/credit-sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "credit-sales"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Credit Sale Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Credit-sale payment updates totals\", function () {",
+                  "  pm.expect(data).to.have.property(\"paidAmount\");",
+                  "  pm.expect(data).to.have.property(\"remainingAmount\");",
+                  "});",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"creditSaleId\", data._id);",
+                  "}",
+                  "if (data && data.status) {",
+                  "  pm.collectionVariables.set(\"creditSaleStatus\", data.status);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Adds a payment to an existing credit-sale invoice and recalculates paid and remaining totals. The selected invoice is paid first, then if amount exceeds its remainingAmount the backend distributes the extra amount to the customer's other open invoices in newest-to-oldest order. If amount exceeds the customer's totalRemainingAmount across open invoices, the API returns message, invoiceId, remainingAmount, and totalRemainingAmount.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 25,\n  \"paymentDate\": \"{{creditPaymentDate}}\",\n  \"note\": \"Second installment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/credit-sales/{{creditSaleId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "credit-sales",
+                "{{creditSaleId}}",
+                "payments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Credit Sale Refund",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Credit-sale refund updates refund fields\", function () {",
+                  "  pm.expect(data).to.have.property(\"refunds\");",
+                  "  pm.expect(data).to.have.property(\"refundStatus\");",
+                  "  pm.expect(data).to.have.property(\"refundDueAmount\");",
+                  "  pm.expect(data).to.have.property(\"returnedPaidAmount\");",
+                  "  pm.expect(data).to.have.property(\"reallocatedPaidAmount\");",
+                  "});",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"creditSaleId\", data._id);",
+                  "}",
+                  "if (data && data.status) {",
+                  "  pm.collectionVariables.set(\"creditSaleStatus\", data.status);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Adds a partial refund to a credit-sale invoice. For a full invoice return, replace items with { \"refundAll\": true }. When a partial refund creates overpayment, the backend reallocates it to the customer's other open credit invoices first, then returns any leftover cash in returnedPaidAmount and stores the transferred amount in reallocatedPaidAmount. When the invoice is fully returned, the backend returns the invoice paidAmount, stores it in returnedPaidAmount, and changes status to Reactionary.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refundDate\": \"{{creditRefundDate}}\",\n  \"note\": \"Customer returned one unit\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/credit-sales/{{creditSaleId}}/refunds",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "credit-sales",
+                "{{creditSaleId}}",
+                "refunds"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Credit Sale",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Updated credit-sale invoice includes remainingAmount\", function () {",
+                  "  pm.expect(data).to.have.property(\"remainingAmount\");",
+                  "});",
+                  "if (data && data._id) {",
+                  "  pm.collectionVariables.set(\"creditSaleId\", data._id);",
+                  "}",
+                  "if (data && data.status) {",
+                  "  pm.collectionVariables.set(\"creditSaleStatus\", data.status);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "description": "Updates credit-sale invoice details and items. Payment amounts must be changed through the payments endpoint.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"{{creditSellingDate}}\",\n  \"dueDate\": \"{{creditDueDate}}\",\n  \"notes\": \"Updated installment plan\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 3,\n      \"price\": 15\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/credit-sales/{{creditSaleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "credit-sales",
+                "{{creditSaleId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Credit Sale",
+          "request": {
+            "method": "DELETE",
+            "description": "Deletes a credit-sale invoice and restores its item quantities back to inventory.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/credit-sales/{{creditSaleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "credit-sales",
+                "{{creditSaleId}}"
               ]
             }
           },
@@ -861,6 +1278,30 @@
     {
       "key": "productSearchCode",
       "value": "WM-001"
+    },
+    {
+      "key": "creditSaleId",
+      "value": ""
+    },
+    {
+      "key": "creditSaleStatus",
+      "value": "pending"
+    },
+    {
+      "key": "creditSellingDate",
+      "value": "2026-03-14"
+    },
+    {
+      "key": "creditDueDate",
+      "value": "2026-04-14"
+    },
+    {
+      "key": "creditPaymentDate",
+      "value": "2026-03-20"
+    },
+    {
+      "key": "creditRefundDate",
+      "value": "2026-03-21"
     },
     {
       "key": "sellingId",
