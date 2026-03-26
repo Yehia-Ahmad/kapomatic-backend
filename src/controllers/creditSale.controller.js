@@ -4,6 +4,7 @@ const Customer = require("../models/customer.model");
 const Product = require("../models/product.model");
 const asyncHandler = require("../utils/asyncHandler");
 const { toCreditSaleInvoice } = require("../utils/creditSaleFormatter");
+const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
 
 const REACTIONARY_CREDIT_SALE_STATUS = "Reactionary";
 const CREDIT_SALE_STATUSES = new Set([
@@ -100,6 +101,53 @@ const parsePositiveNumber = (value) => {
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
   return parsed;
 };
+
+const normalizeOptionalDiscountPercentage = (value, res) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return 0;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+    res.status(400);
+    throw new Error("نسبة الخصم يجب أن تكون رقمًا بين 0 و 100");
+  }
+
+  return Number(parsed.toFixed(2));
+};
+
+const normalizeOptionalShippingFees = (value, res) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return 0;
+  }
+
+  const parsed = parseNonNegativeNumber(value);
+  if (parsed === null) {
+    res.status(400);
+    throw new Error("مصاريف الشحن يجب أن تكون رقمًا غير سالب");
+  }
+
+  return roundMoney(parsed);
+};
+
+const resolveInvoicePricing = (body, currentValues, res) => ({
+  discountPercentage:
+    body.discountPercentage !== undefined
+      ? normalizeOptionalDiscountPercentage(body.discountPercentage, res) ?? 0
+      : Number(currentValues.discountPercentage || 0),
+  shippingFees:
+    body.shippingFees !== undefined
+      ? normalizeOptionalShippingFees(body.shippingFees, res) ?? 0
+      : roundMoney(currentValues.shippingFees || 0),
+});
 
 const parseBoolean = (value) => {
   if (value === undefined) return undefined;
@@ -424,14 +472,9 @@ const buildPersistedItems = (items, productsById) =>
       categoryName: product.category ? product.category.name : "Uncategorized",
       quantity: item.quantity,
       unitPrice: item.unitPrice,
-      totalPrice: item.unitPrice * item.quantity,
+      totalPrice: roundMoney(item.unitPrice * item.quantity),
     };
   });
-
-const buildInvoiceTotals = (items) => ({
-  totalQuantity: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-  totalPrice: items.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0),
-});
 
 const buildRefundTotals = (items) => ({
   totalQuantity: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
@@ -458,8 +501,6 @@ const getRefundStatus = (refunds = [], totalQuantity = 0) => {
 
   return Number(totalQuantity || 0) === 0 ? "full" : "partial";
 };
-
-const roundMoney = (value) => Number(Number(value || 0).toFixed(2));
 
 const getTotalPaymentsAmount = (payments = []) =>
   roundMoney(payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
@@ -886,6 +927,7 @@ const createCreditSale = asyncHandler(async (req, res) => {
   const normalizedDueDate = normalizeOptionalDate(req.body.dueDate, "تاريخ الاستحقاق", res);
   const normalizedNotes = normalizeOptionalString(req.body.notes, "ملاحظات البيع الآجل", res);
   const items = normalizeCreditSaleItems(req.body, res);
+  const invoicePricing = resolveInvoicePricing(req.body, {}, res);
 
   ensureDueDateIsValid(normalizedSellingDate, normalizedDueDate, res);
 
@@ -922,7 +964,7 @@ const createCreditSale = asyncHandler(async (req, res) => {
     res,
   });
   const persistedItems = buildPersistedItems(items, productsById);
-  const invoiceTotals = buildInvoiceTotals(persistedItems);
+  const invoiceTotals = buildInvoiceTotals(persistedItems, invoicePricing);
   const payments =
     initialPaidAmount > 0
       ? [
@@ -957,6 +999,8 @@ const createCreditSale = asyncHandler(async (req, res) => {
       dueDate: normalizedDueDate ?? undefined,
       items: persistedItems,
       totalQuantity: invoiceTotals.totalQuantity,
+      discountPercentage: invoicePricing.discountPercentage,
+      shippingFees: invoiceTotals.shippingFees,
       totalPrice: invoiceTotals.totalPrice,
       paidAmount: creditAmounts.paidAmount,
       remainingAmount: creditAmounts.remainingAmount,
@@ -1118,6 +1162,7 @@ const updateCreditSale = asyncHandler(async (req, res) => {
     req.body.notes !== undefined
       ? normalizeOptionalString(req.body.notes, "ملاحظات البيع الآجل", res)
       : creditSale.notes;
+  const invoicePricing = resolveInvoicePricing(req.body, creditSale, res);
 
   ensureDueDateIsValid(normalizedSellingDate, normalizedDueDate, res);
 
@@ -1156,17 +1201,26 @@ const updateCreditSale = asyncHandler(async (req, res) => {
     req.body.productId !== undefined ||
     req.body.price !== undefined ||
     getRawQuantity(req.body) !== undefined;
+  const shouldUpdateInvoicePricing =
+    shouldUpdateItems ||
+    req.body.discountPercentage !== undefined ||
+    req.body.shippingFees !== undefined;
 
-  if (shouldUpdateItems && Array.isArray(creditSale.refunds) && creditSale.refunds.length > 0) {
+  if (
+    shouldUpdateInvoicePricing &&
+    Array.isArray(creditSale.refunds) &&
+    creditSale.refunds.length > 0
+  ) {
     res.status(400);
     throw new Error(
-      "لا يمكن تعديل عناصر فاتورة تحتوي على مرتجعات. استخدم مسار المرتجع أو أنشئ فاتورة جديدة"
+      "لا يمكن تعديل عناصر أو تسعير فاتورة تحتوي على مرتجعات. استخدم مسار المرتجع أو أنشئ فاتورة جديدة"
     );
   }
 
   const currentItems = getCreditSaleItemInputs(creditSale);
   let nextItems = currentItems;
   let productsById = new Map();
+  let persistedItems = null;
 
   if (shouldUpdateItems) {
     if (req.body.items === undefined && currentItems.length !== 1) {
@@ -1208,8 +1262,15 @@ const updateCreditSale = asyncHandler(async (req, res) => {
 
   try {
     if (shouldUpdateItems) {
-      const persistedItems = buildPersistedItems(nextItems, productsById);
-      const invoiceTotals = buildInvoiceTotals(persistedItems);
+      persistedItems = buildPersistedItems(nextItems, productsById);
+      creditSale.items = persistedItems;
+    }
+
+    if (shouldUpdateInvoicePricing) {
+      const pricingItems = shouldUpdateItems
+        ? persistedItems
+        : getCurrentCreditSaleDocumentItems(creditSale);
+      const invoiceTotals = buildInvoiceTotals(pricingItems, invoicePricing);
       const creditAmounts = calculateCreditAmounts(
         invoiceTotals.totalPrice,
         creditSale.payments,
@@ -1229,8 +1290,9 @@ const updateCreditSale = asyncHandler(async (req, res) => {
         );
       }
 
-      creditSale.items = persistedItems;
       creditSale.totalQuantity = invoiceTotals.totalQuantity;
+      creditSale.discountPercentage = invoicePricing.discountPercentage;
+      creditSale.shippingFees = invoiceTotals.shippingFees;
       creditSale.totalPrice = invoiceTotals.totalPrice;
       applyCreditAmountsToInvoice(creditSale, creditAmounts);
     }
@@ -1430,7 +1492,10 @@ const addCreditSaleRefund = asyncHandler(async (req, res) => {
   try {
     const persistedItems = buildPersistedItems(nextItems, productsById);
     const refundItems = buildPersistedRefundItems(refundSelections);
-    const invoiceTotals = buildInvoiceTotals(persistedItems);
+    const invoiceTotals = buildInvoiceTotals(persistedItems, {
+      discountPercentage: creditSale.discountPercentage ?? 0,
+      shippingFees: creditSale.shippingFees ?? 0,
+    });
     const refundTotals = buildRefundTotals(refundItems);
     const isFullRefund = invoiceTotals.totalQuantity === 0;
     const currentReturnedPaidAmount = roundMoney(creditSale.returnedPaidAmount || 0);
@@ -1495,6 +1560,8 @@ const addCreditSaleRefund = asyncHandler(async (req, res) => {
 
     creditSale.items = persistedItems;
     creditSale.totalQuantity = invoiceTotals.totalQuantity;
+    creditSale.discountPercentage = Number(creditSale.discountPercentage || 0);
+    creditSale.shippingFees = invoiceTotals.shippingFees;
     creditSale.totalPrice = invoiceTotals.totalPrice;
     creditSale.returnedPaidAmount = nextReturnedPaidAmount;
     creditSale.reallocatedPaidAmount = nextReallocatedPaidAmount;

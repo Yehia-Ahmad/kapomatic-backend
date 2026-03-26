@@ -174,6 +174,17 @@ const creditSaleSchema = new mongoose.Schema(
       required: [true, "إجمالي الكمية مطلوب"],
       min: [0, "إجمالي الكمية لا يمكن أن يكون سالبًا"],
     },
+    discountPercentage: {
+      type: Number,
+      default: 0,
+      min: [0, "نسبة الخصم لا يمكن أن تكون سالبة"],
+      max: [100, "نسبة الخصم لا يمكن أن تتجاوز 100"],
+    },
+    shippingFees: {
+      type: Number,
+      default: 0,
+      min: [0, "مصاريف الشحن لا يمكن أن تكون سالبة"],
+    },
     totalPrice: {
       type: Number,
       required: [true, "إجمالي السعر مطلوب"],

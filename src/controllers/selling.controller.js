@@ -3,6 +3,7 @@ const Customer = require("../models/customer.model");
 const Product = require("../models/product.model");
 const Selling = require("../models/selling.model");
 const asyncHandler = require("../utils/asyncHandler");
+const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
 
 const getRawQuantity = (body) => {
   if (body.quantity !== undefined) return body.quantity;
@@ -36,6 +37,53 @@ const parseNonNegativeNumber = (value) => {
   if (!Number.isFinite(parsed) || parsed < 0) return null;
   return parsed;
 };
+
+const normalizeOptionalDiscountPercentage = (value, res) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return 0;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+    res.status(400);
+    throw new Error("نسبة الخصم يجب أن تكون رقمًا بين 0 و 100");
+  }
+
+  return Number(parsed.toFixed(2));
+};
+
+const normalizeOptionalShippingFees = (value, res) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return 0;
+  }
+
+  const parsed = parseNonNegativeNumber(value);
+  if (parsed === null) {
+    res.status(400);
+    throw new Error("مصاريف الشحن يجب أن تكون رقمًا غير سالب");
+  }
+
+  return roundMoney(parsed);
+};
+
+const resolveInvoicePricing = (body, currentValues, res) => ({
+  discountPercentage:
+    body.discountPercentage !== undefined
+      ? normalizeOptionalDiscountPercentage(body.discountPercentage, res) ?? 0
+      : Number(currentValues.discountPercentage || 0),
+  shippingFees:
+    body.shippingFees !== undefined
+      ? normalizeOptionalShippingFees(body.shippingFees, res) ?? 0
+      : roundMoney(currentValues.shippingFees || 0),
+});
 
 const normalizeRequiredString = (value, fieldLabel, res) => {
   if (typeof value !== "string" || !value.trim()) {
@@ -198,22 +246,15 @@ const getSellingItems = (selling) => {
       categoryName: selling.categoryName,
       quantity: selling.quantity,
       unitPrice: selling.unitPrice,
-      totalPrice: selling.totalPrice,
+      totalPrice:
+        selling.unitPrice !== undefined && selling.quantity !== undefined
+          ? roundMoney(Number(selling.unitPrice || 0) * Number(selling.quantity || 0))
+          : selling.totalPrice,
     },
   ];
 };
 
 const getInvoiceIdentifier = (selling) => selling.invoiceId ?? selling._id;
-
-const buildInvoiceTotals = (items) => {
-  const totalQuantity = items.reduce(
-    (sum, item) => sum + Number(item.productQuantity ?? item.quantity ?? 0),
-    0
-  );
-  const totalPrice = items.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
-
-  return { totalQuantity, totalPrice };
-};
 
 const toSellingInvoiceItem = (item, selling, options = {}) => {
   const sellingHistoryItem = {
@@ -251,6 +292,8 @@ const toSellingInvoice = (selling, options = {}) => {
     sellingDate: selling.sellingDate,
     itemCount: items.length,
     totalQuantity: selling.totalQuantity ?? totals.totalQuantity,
+    discountPercentage: selling.discountPercentage ?? 0,
+    shippingFees: selling.shippingFees ?? 0,
     totalPrice: selling.totalPrice ?? totals.totalPrice,
     items,
   };
@@ -401,7 +444,7 @@ const buildPersistedItems = (items, productsById) =>
       categoryName: product.category ? product.category.name : "Uncategorized",
       quantity: item.quantity,
       unitPrice: item.unitPrice,
-      totalPrice: item.unitPrice * item.quantity,
+      totalPrice: roundMoney(item.unitPrice * item.quantity),
     };
   });
 
@@ -417,6 +460,7 @@ const createSelling = asyncHandler(async (req, res) => {
   const normalizedCustomerPhone = normalizeRequiredString(customerPhone, "رقم هاتف العميل", res);
   const normalizedSellingDate = normalizeSellingDate(req.body.sellingDate, res);
   const items = normalizeSellingItems(req.body, res);
+  const invoicePricing = resolveInvoicePricing(req.body, {}, res);
 
   await ensureCustomerExistsForSelling({
     customerName: normalizedCustomerName,
@@ -429,12 +473,7 @@ const createSelling = asyncHandler(async (req, res) => {
     res,
   });
   const persistedItems = buildPersistedItems(items, productsById);
-  const invoiceTotals = buildInvoiceTotals(
-    persistedItems.map((item) => ({
-      productQuantity: item.quantity,
-      totalPrice: item.totalPrice,
-    }))
-  );
+  const invoiceTotals = buildInvoiceTotals(persistedItems, invoicePricing);
   let selling;
 
   try {
@@ -444,6 +483,8 @@ const createSelling = asyncHandler(async (req, res) => {
       sellingDate: normalizedSellingDate,
       items: persistedItems,
       totalQuantity: invoiceTotals.totalQuantity,
+      discountPercentage: invoicePricing.discountPercentage,
+      shippingFees: invoiceTotals.shippingFees,
       totalPrice: invoiceTotals.totalPrice,
     });
   } catch (error) {
@@ -588,12 +629,18 @@ const updateSelling = asyncHandler(async (req, res) => {
     req.body.sellingDate !== undefined
       ? normalizeSellingDate(req.body.sellingDate, res)
       : selling.sellingDate;
+  const invoicePricing = resolveInvoicePricing(req.body, selling, res);
 
   const shouldUpdateItems = hasLineItemChanges(req.body);
+  const shouldUpdateInvoicePricing =
+    shouldUpdateItems ||
+    req.body.discountPercentage !== undefined ||
+    req.body.shippingFees !== undefined;
   const currentItems = getSellingItemInputs(selling);
 
   let nextItems = currentItems;
   let productsById = new Map();
+  let persistedItems = null;
 
   if (shouldUpdateItems) {
     if (req.body.items === undefined && currentItems.length !== 1) {
@@ -637,17 +684,8 @@ const updateSelling = asyncHandler(async (req, res) => {
   });
 
   if (shouldUpdateItems) {
-    const persistedItems = buildPersistedItems(nextItems, productsById);
-    const invoiceTotals = buildInvoiceTotals(
-      persistedItems.map((item) => ({
-        productQuantity: item.quantity,
-        totalPrice: item.totalPrice,
-      }))
-    );
-
+    persistedItems = buildPersistedItems(nextItems, productsById);
     selling.items = persistedItems;
-    selling.totalQuantity = invoiceTotals.totalQuantity;
-    selling.totalPrice = invoiceTotals.totalPrice;
 
     // Clear legacy top-level line-item fields after converting to invoice storage.
     selling.product = undefined;
@@ -655,6 +693,16 @@ const updateSelling = asyncHandler(async (req, res) => {
     selling.categoryName = undefined;
     selling.quantity = undefined;
     selling.unitPrice = undefined;
+  }
+
+  if (shouldUpdateInvoicePricing) {
+    const pricingItems = shouldUpdateItems ? persistedItems : getSellingItems(selling);
+    const invoiceTotals = buildInvoiceTotals(pricingItems, invoicePricing);
+
+    selling.totalQuantity = invoiceTotals.totalQuantity;
+    selling.discountPercentage = invoicePricing.discountPercentage;
+    selling.shippingFees = invoiceTotals.shippingFees;
+    selling.totalPrice = invoiceTotals.totalPrice;
   }
 
   selling.customerName = normalizedCustomerName;

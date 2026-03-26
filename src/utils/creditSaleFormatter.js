@@ -100,6 +100,8 @@ const toCreditSaleInvoice = (creditSale, options = {}) => {
     itemCount: items.length,
     refundCount: refunds.length,
     totalQuantity: creditSale.totalQuantity,
+    discountPercentage: creditSale.discountPercentage ?? 0,
+    shippingFees: creditSale.shippingFees ?? 0,
     totalPrice: creditSale.totalPrice,
     paidAmount: creditSale.paidAmount,
     remainingAmount: creditSale.remainingAmount,
