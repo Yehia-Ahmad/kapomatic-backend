@@ -38,7 +38,7 @@ const parseNonNegativeNumber = (value) => {
   return parsed;
 };
 
-const normalizeOptionalDiscountPercentage = (value, res) => {
+const normalizeOptionalDiscountAmount = (value, res) => {
   if (value === undefined) {
     return undefined;
   }
@@ -47,13 +47,13 @@ const normalizeOptionalDiscountPercentage = (value, res) => {
     return 0;
   }
 
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+  const parsed = parseNonNegativeNumber(value);
+  if (parsed === null) {
     res.status(400);
-    throw new Error("نسبة الخصم يجب أن تكون رقمًا بين 0 و 100");
+    throw new Error("قيمة الخصم يجب أن تكون رقمًا غير سالب");
   }
 
-  return Number(parsed.toFixed(2));
+  return roundMoney(parsed);
 };
 
 const normalizeOptionalShippingFees = (value, res) => {
@@ -74,11 +74,33 @@ const normalizeOptionalShippingFees = (value, res) => {
   return roundMoney(parsed);
 };
 
+const resolveStoredDiscountPricing = (currentValues = {}) => {
+  if (currentValues.discountAmount !== undefined && currentValues.discountAmount !== null) {
+    return {
+      discountAmount: roundMoney(currentValues.discountAmount || 0),
+    };
+  }
+
+  if (
+    currentValues.discountPercentage !== undefined &&
+    currentValues.discountPercentage !== null
+  ) {
+    return {
+      discountPercentage: Number(currentValues.discountPercentage || 0),
+    };
+  }
+
+  return {
+    discountAmount: 0,
+  };
+};
+
 const resolveInvoicePricing = (body, currentValues, res) => ({
-  discountPercentage:
-    body.discountPercentage !== undefined
-      ? normalizeOptionalDiscountPercentage(body.discountPercentage, res) ?? 0
-      : Number(currentValues.discountPercentage || 0),
+  ...(body.discountAmount !== undefined
+    ? {
+        discountAmount: normalizeOptionalDiscountAmount(body.discountAmount, res) ?? 0,
+      }
+    : resolveStoredDiscountPricing(currentValues)),
   shippingFees:
     body.shippingFees !== undefined
       ? normalizeOptionalShippingFees(body.shippingFees, res) ?? 0
@@ -282,7 +304,11 @@ const toSellingInvoiceItem = (item, selling, options = {}) => {
 
 const toSellingInvoice = (selling, options = {}) => {
   const items = getSellingItems(selling).map((item) => toSellingInvoiceItem(item, selling, options));
-  const totals = buildInvoiceTotals(items);
+  const totals = buildInvoiceTotals(items, {
+    discountAmount: selling.discountAmount,
+    discountPercentage: selling.discountPercentage,
+    shippingFees: selling.shippingFees,
+  });
 
   return {
     _id: selling._id,
@@ -292,8 +318,8 @@ const toSellingInvoice = (selling, options = {}) => {
     sellingDate: selling.sellingDate,
     itemCount: items.length,
     totalQuantity: selling.totalQuantity ?? totals.totalQuantity,
-    discountPercentage: selling.discountPercentage ?? 0,
-    shippingFees: selling.shippingFees ?? 0,
+    discountAmount: totals.discountAmount,
+    shippingFees: selling.shippingFees ?? totals.shippingFees,
     totalPrice: selling.totalPrice ?? totals.totalPrice,
     items,
   };
@@ -483,7 +509,7 @@ const createSelling = asyncHandler(async (req, res) => {
       sellingDate: normalizedSellingDate,
       items: persistedItems,
       totalQuantity: invoiceTotals.totalQuantity,
-      discountPercentage: invoicePricing.discountPercentage,
+      discountAmount: invoiceTotals.discountAmount,
       shippingFees: invoiceTotals.shippingFees,
       totalPrice: invoiceTotals.totalPrice,
     });
@@ -634,7 +660,7 @@ const updateSelling = asyncHandler(async (req, res) => {
   const shouldUpdateItems = hasLineItemChanges(req.body);
   const shouldUpdateInvoicePricing =
     shouldUpdateItems ||
-    req.body.discountPercentage !== undefined ||
+    req.body.discountAmount !== undefined ||
     req.body.shippingFees !== undefined;
   const currentItems = getSellingItemInputs(selling);
 
@@ -700,7 +726,8 @@ const updateSelling = asyncHandler(async (req, res) => {
     const invoiceTotals = buildInvoiceTotals(pricingItems, invoicePricing);
 
     selling.totalQuantity = invoiceTotals.totalQuantity;
-    selling.discountPercentage = invoicePricing.discountPercentage;
+    selling.discountAmount = invoiceTotals.discountAmount;
+    selling.discountPercentage = undefined;
     selling.shippingFees = invoiceTotals.shippingFees;
     selling.totalPrice = invoiceTotals.totalPrice;
   }

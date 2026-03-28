@@ -35,7 +35,7 @@ Backend API for a warehouse system with:
 - `sellingDate` (required)
 - `quantity` (required, positive integer, can also be sent as `quentity`)
 - `price` (required, non-negative number, price per each sold item)
-- `discountPercentage` (optional, number from `0` to `100`, defaults to `0`)
+- `discountAmount` (optional, non-negative number, defaults to `0`)
 - `shippingFees` (optional, non-negative number, defaults to `0`)
 - `totalPrice` (auto = subtotal - discount + shipping fees)
 
@@ -47,7 +47,7 @@ Backend API for a warehouse system with:
 - `dueDate` (optional)
 - `items` (required, one or more products)
 - `totalQuantity` (auto)
-- `discountPercentage` (optional, number from `0` to `100`, defaults to `0`)
+- `discountAmount` (optional, non-negative number, defaults to `0`)
 - `shippingFees` (optional, non-negative number, defaults to `0`)
 - `totalPrice` (auto = subtotal - discount + shipping fees)
 - `paidAmount` (auto from payments)
@@ -213,7 +213,7 @@ Sample credit-sale payload:
   "sellingDate": "2026-03-14",
   "dueDate": "2026-04-14",
   "notes": "Monthly installment",
-  "discountPercentage": 10,
+  "discountAmount": 10,
   "shippingFees": 25,
   "initialPaidAmount": 100,
   "items": [
@@ -246,11 +246,11 @@ Sample credit-sale response:
   "itemCount": 2,
   "refundCount": 0,
   "totalQuantity": 3,
-  "discountPercentage": 10,
+  "discountAmount": 10,
   "shippingFees": 25,
-  "totalPrice": 565,
+  "totalPrice": 615,
   "paidAmount": 100,
-  "remainingAmount": 465,
+  "remainingAmount": 515,
   "refundDueAmount": 0,
   "refundStatus": "none",
   "refundedQuantity": 0,
@@ -349,7 +349,7 @@ Sample bulk selling payload:
   "customerName": "Ahmed Ali",
   "customerPhone": "+201234567890",
   "sellingDate": "2026-03-12",
-  "discountPercentage": 10,
+  "discountAmount": 10,
   "shippingFees": 25,
   "items": [
     {
@@ -376,9 +376,9 @@ Sample bulk selling response:
   "sellingDate": "2026-03-12T00:00:00.000Z",
   "itemCount": 2,
   "totalQuantity": 3,
-  "discountPercentage": 10,
+  "discountAmount": 10,
   "shippingFees": 25,
-  "totalPrice": 565,
+  "totalPrice": 615,
   "items": [
     {
       "_id": "67d0b7b5a8c197aa0adf1111",
@@ -422,9 +422,9 @@ Sample selling invoice from `GET /api/sellings`:
   "sellingDate": "2026-03-12T00:00:00.000Z",
   "itemCount": 2,
   "totalQuantity": 3,
-  "discountPercentage": 10,
+  "discountAmount": 10,
   "shippingFees": 25,
-  "totalPrice": 565,
+  "totalPrice": 615,
   "items": [
     {
       "_id": "67d0b7b5a8c197aa0adf1111",

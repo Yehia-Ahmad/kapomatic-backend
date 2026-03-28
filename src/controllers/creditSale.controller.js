@@ -102,7 +102,7 @@ const parsePositiveNumber = (value) => {
   return parsed;
 };
 
-const normalizeOptionalDiscountPercentage = (value, res) => {
+const normalizeOptionalDiscountAmount = (value, res) => {
   if (value === undefined) {
     return undefined;
   }
@@ -111,13 +111,13 @@ const normalizeOptionalDiscountPercentage = (value, res) => {
     return 0;
   }
 
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+  const parsed = parseNonNegativeNumber(value);
+  if (parsed === null) {
     res.status(400);
-    throw new Error("نسبة الخصم يجب أن تكون رقمًا بين 0 و 100");
+    throw new Error("قيمة الخصم يجب أن تكون رقمًا غير سالب");
   }
 
-  return Number(parsed.toFixed(2));
+  return roundMoney(parsed);
 };
 
 const normalizeOptionalShippingFees = (value, res) => {
@@ -138,11 +138,33 @@ const normalizeOptionalShippingFees = (value, res) => {
   return roundMoney(parsed);
 };
 
+const resolveStoredDiscountPricing = (currentValues = {}) => {
+  if (currentValues.discountAmount !== undefined && currentValues.discountAmount !== null) {
+    return {
+      discountAmount: roundMoney(currentValues.discountAmount || 0),
+    };
+  }
+
+  if (
+    currentValues.discountPercentage !== undefined &&
+    currentValues.discountPercentage !== null
+  ) {
+    return {
+      discountPercentage: Number(currentValues.discountPercentage || 0),
+    };
+  }
+
+  return {
+    discountAmount: 0,
+  };
+};
+
 const resolveInvoicePricing = (body, currentValues, res) => ({
-  discountPercentage:
-    body.discountPercentage !== undefined
-      ? normalizeOptionalDiscountPercentage(body.discountPercentage, res) ?? 0
-      : Number(currentValues.discountPercentage || 0),
+  ...(body.discountAmount !== undefined
+    ? {
+        discountAmount: normalizeOptionalDiscountAmount(body.discountAmount, res) ?? 0,
+      }
+    : resolveStoredDiscountPricing(currentValues)),
   shippingFees:
     body.shippingFees !== undefined
       ? normalizeOptionalShippingFees(body.shippingFees, res) ?? 0
@@ -999,7 +1021,7 @@ const createCreditSale = asyncHandler(async (req, res) => {
       dueDate: normalizedDueDate ?? undefined,
       items: persistedItems,
       totalQuantity: invoiceTotals.totalQuantity,
-      discountPercentage: invoicePricing.discountPercentage,
+      discountAmount: invoiceTotals.discountAmount,
       shippingFees: invoiceTotals.shippingFees,
       totalPrice: invoiceTotals.totalPrice,
       paidAmount: creditAmounts.paidAmount,
@@ -1203,7 +1225,7 @@ const updateCreditSale = asyncHandler(async (req, res) => {
     getRawQuantity(req.body) !== undefined;
   const shouldUpdateInvoicePricing =
     shouldUpdateItems ||
-    req.body.discountPercentage !== undefined ||
+    req.body.discountAmount !== undefined ||
     req.body.shippingFees !== undefined;
 
   if (
@@ -1291,7 +1313,8 @@ const updateCreditSale = asyncHandler(async (req, res) => {
       }
 
       creditSale.totalQuantity = invoiceTotals.totalQuantity;
-      creditSale.discountPercentage = invoicePricing.discountPercentage;
+      creditSale.discountAmount = invoiceTotals.discountAmount;
+      creditSale.discountPercentage = undefined;
       creditSale.shippingFees = invoiceTotals.shippingFees;
       creditSale.totalPrice = invoiceTotals.totalPrice;
       applyCreditAmountsToInvoice(creditSale, creditAmounts);
@@ -1493,7 +1516,8 @@ const addCreditSaleRefund = asyncHandler(async (req, res) => {
     const persistedItems = buildPersistedItems(nextItems, productsById);
     const refundItems = buildPersistedRefundItems(refundSelections);
     const invoiceTotals = buildInvoiceTotals(persistedItems, {
-      discountPercentage: creditSale.discountPercentage ?? 0,
+      discountAmount: creditSale.discountAmount,
+      discountPercentage: creditSale.discountPercentage,
       shippingFees: creditSale.shippingFees ?? 0,
     });
     const refundTotals = buildRefundTotals(refundItems);
@@ -1560,7 +1584,8 @@ const addCreditSaleRefund = asyncHandler(async (req, res) => {
 
     creditSale.items = persistedItems;
     creditSale.totalQuantity = invoiceTotals.totalQuantity;
-    creditSale.discountPercentage = Number(creditSale.discountPercentage || 0);
+    creditSale.discountAmount = invoiceTotals.discountAmount;
+    creditSale.discountPercentage = undefined;
     creditSale.shippingFees = invoiceTotals.shippingFees;
     creditSale.totalPrice = invoiceTotals.totalPrice;
     creditSale.returnedPaidAmount = nextReturnedPaidAmount;

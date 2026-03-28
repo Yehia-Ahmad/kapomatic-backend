@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, and sellings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountPercentage plus shippingFees invoice fields. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Create Selling auto-creates or updates the customer by customerName and customerPhone, stores one invoice document with an items array, returns discountPercentage and shippingFees, and Get All Sellings returns invoice items with productCode."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, and sellings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Create Selling auto-creates or updates the customer by customerName and customerPhone, stores one invoice document with an items array, returns discountAmount and shippingFees, and Get All Sellings returns invoice items with productCode."
   },
   "item": [
     {
@@ -638,7 +638,7 @@
                   "    pm.expect(data[0]).to.have.property(\"refundStatus\");",
                   "    pm.expect(data[0]).to.have.property(\"returnedPaidAmount\");",
                   "    pm.expect(data[0]).to.have.property(\"reallocatedPaidAmount\");",
-                  "    pm.expect(data[0]).to.have.property(\"discountPercentage\");",
+                  "    pm.expect(data[0]).to.have.property(\"discountAmount\");",
                   "    pm.expect(data[0]).to.have.property(\"shippingFees\");",
                   "    pm.expect(data[0]).to.have.property(\"payments\");",
                   "    pm.expect(data[0]).to.have.property(\"refunds\");",
@@ -656,7 +656,7 @@
           ],
           "request": {
             "method": "GET",
-            "description": "Returns all credit-sale invoices with payment, refund, remaining balance, refundDueAmount, returnedPaidAmount, reallocatedPaidAmount, discountPercentage, and shippingFees information.",
+            "description": "Returns all credit-sale invoices with payment, refund, remaining balance, refundDueAmount, returnedPaidAmount, reallocatedPaidAmount, discountAmount, and shippingFees information.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/credit-sales",
@@ -731,7 +731,7 @@
                   "  pm.expect(data).to.have.property(\"refundStatus\");",
                   "  pm.expect(data).to.have.property(\"returnedPaidAmount\");",
                   "  pm.expect(data).to.have.property(\"reallocatedPaidAmount\");",
-                  "  pm.expect(data).to.have.property(\"discountPercentage\");",
+                  "  pm.expect(data).to.have.property(\"discountAmount\");",
                   "  pm.expect(data).to.have.property(\"shippingFees\");",
                   "});",
                   "if (data && data._id) {",
@@ -746,7 +746,7 @@
           ],
           "request": {
             "method": "GET",
-            "description": "Returns one credit-sale invoice by invoice document ID, including payments, refunds, remainingAmount, refundDueAmount, returnedPaidAmount, reallocatedPaidAmount, discountPercentage, and shippingFees.",
+            "description": "Returns one credit-sale invoice by invoice document ID, including payments, refunds, remainingAmount, refundDueAmount, returnedPaidAmount, reallocatedPaidAmount, discountAmount, and shippingFees.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/credit-sales/{{creditSaleId}}",
@@ -772,7 +772,7 @@
                 "exec": [
                   "const data = pm.response.json();",
                   "pm.test(\"Created credit-sale invoice includes discount and shipping fields\", function () {",
-                  "  pm.expect(data).to.have.property(\"discountPercentage\");",
+                  "  pm.expect(data).to.have.property(\"discountAmount\");",
                   "  pm.expect(data).to.have.property(\"shippingFees\");",
                   "});",
                   "if (data && (data._id || data.invoiceId)) {",
@@ -796,7 +796,7 @@
           ],
           "request": {
             "method": "POST",
-            "description": "Creates a credit-sale invoice, links or creates the customer automatically, deducts inventory, optionally stores an initial payment, and accepts optional discountPercentage plus shippingFees.",
+            "description": "Creates a credit-sale invoice, links or creates the customer automatically, deducts inventory, optionally stores an initial payment, and accepts optional discountAmount plus shippingFees.",
             "header": [
               {
                 "key": "Content-Type",
@@ -805,7 +805,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"{{creditSellingDate}}\",\n  \"dueDate\": \"{{creditDueDate}}\",\n  \"notes\": \"Monthly installment\",\n  \"discountPercentage\": 10,\n  \"shippingFees\": 25,\n  \"initialPaidAmount\": 50,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"price\": 15\n    }\n  ]\n}"
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"{{creditSellingDate}}\",\n  \"dueDate\": \"{{creditDueDate}}\",\n  \"notes\": \"Monthly installment\",\n  \"discountAmount\": 10,\n  \"shippingFees\": 25,\n  \"initialPaidAmount\": 50,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"price\": 15\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/credit-sales",
@@ -936,7 +936,7 @@
                   "const data = pm.response.json();",
                   "pm.test(\"Updated credit-sale invoice includes remainingAmount\", function () {",
                   "  pm.expect(data).to.have.property(\"remainingAmount\");",
-                  "  pm.expect(data).to.have.property(\"discountPercentage\");",
+                  "  pm.expect(data).to.have.property(\"discountAmount\");",
                   "  pm.expect(data).to.have.property(\"shippingFees\");",
                   "});",
                   "if (data && data._id) {",
@@ -951,7 +951,7 @@
           ],
           "request": {
             "method": "PUT",
-            "description": "Updates credit-sale invoice details, items, discountPercentage, and shippingFees. Payment amounts must be changed through the payments endpoint.",
+            "description": "Updates credit-sale invoice details, items, discountAmount, and shippingFees. Payment amounts must be changed through the payments endpoint.",
             "header": [
               {
                 "key": "Content-Type",
@@ -960,7 +960,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"{{creditSellingDate}}\",\n  \"dueDate\": \"{{creditDueDate}}\",\n  \"notes\": \"Updated installment plan\",\n  \"discountPercentage\": 5,\n  \"shippingFees\": 20,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 3,\n      \"price\": 15\n    }\n  ]\n}"
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"{{creditSellingDate}}\",\n  \"dueDate\": \"{{creditDueDate}}\",\n  \"notes\": \"Updated installment plan\",\n  \"discountAmount\": 5,\n  \"shippingFees\": 20,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 3,\n      \"price\": 15\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/credit-sales/{{creditSaleId}}",
@@ -1013,7 +1013,7 @@
                   "if (Array.isArray(data) && data.length > 0) {",
                   "  pm.test(\"Selling invoices include item productCode\", function () {",
                   "    pm.expect(data[0]).to.have.property(\"items\");",
-                  "    pm.expect(data[0]).to.have.property(\"discountPercentage\");",
+                  "    pm.expect(data[0]).to.have.property(\"discountAmount\");",
                   "    pm.expect(data[0]).to.have.property(\"shippingFees\");",
                   "    if (Array.isArray(data[0].items) && data[0].items.length > 0) {",
                   "      pm.expect(data[0].items[0]).to.have.property(\"productCode\");",
@@ -1032,7 +1032,7 @@
           ],
           "request": {
             "method": "GET",
-            "description": "Returns selling invoices. Each invoice item includes the productCode field, and each invoice includes discountPercentage and shippingFees.",
+            "description": "Returns selling invoices. Each invoice item includes the productCode field, and each invoice includes discountAmount and shippingFees.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sellings",
@@ -1098,7 +1098,7 @@
                   "const data = pm.response.json();",
                   "pm.test(\"Selling invoice response includes items\", function () {",
                   "  pm.expect(data).to.have.property(\"items\");",
-                  "  pm.expect(data).to.have.property(\"discountPercentage\");",
+                  "  pm.expect(data).to.have.property(\"discountAmount\");",
                   "  pm.expect(data).to.have.property(\"shippingFees\");",
                   "});",
                   "if (data && data._id) {",
@@ -1113,7 +1113,7 @@
           ],
           "request": {
             "method": "GET",
-            "description": "Returns one selling invoice by invoice document ID, including discountPercentage and shippingFees.",
+            "description": "Returns one selling invoice by invoice document ID, including discountAmount and shippingFees.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",
@@ -1139,7 +1139,7 @@
                 "exec": [
                   "const data = pm.response.json();",
                   "pm.test(\"Created selling invoice includes discount and shipping fields\", function () {",
-                  "  pm.expect(data).to.have.property(\"discountPercentage\");",
+                  "  pm.expect(data).to.have.property(\"discountAmount\");",
                   "  pm.expect(data).to.have.property(\"shippingFees\");",
                   "});",
                   "if (data && (data._id || data.invoiceId)) {",
@@ -1151,7 +1151,7 @@
           ],
           "request": {
             "method": "POST",
-            "description": "Creates a selling invoice with one or more items plus optional discountPercentage and shippingFees. If no customer exists with the submitted customerName and customerPhone, the backend creates the customer. If the phone already exists with a different name, the customer name is updated.",
+            "description": "Creates a selling invoice with one or more items plus optional discountAmount and shippingFees. If no customer exists with the submitted customerName and customerPhone, the backend creates the customer. If the phone already exists with a different name, the customer name is updated.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1160,7 +1160,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-12\",\n  \"discountPercentage\": 10,\n  \"shippingFees\": 25,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"price\": 15\n    }\n  ]\n}"
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-12\",\n  \"discountAmount\": 10,\n  \"shippingFees\": 25,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"price\": 15\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/sellings",
@@ -1186,7 +1186,7 @@
                   "const data = pm.response.json();",
                   "pm.test(\"Updated selling invoice response includes items\", function () {",
                   "  pm.expect(data).to.have.property(\"items\");",
-                  "  pm.expect(data).to.have.property(\"discountPercentage\");",
+                  "  pm.expect(data).to.have.property(\"discountAmount\");",
                   "  pm.expect(data).to.have.property(\"shippingFees\");",
                   "});",
                   "if (data && data._id) {",
@@ -1198,7 +1198,7 @@
           ],
           "request": {
             "method": "PUT",
-            "description": "Updates a selling invoice, including optional discountPercentage and shippingFees. Send the full items array when replacing invoice lines, especially for invoices that contain more than one item.",
+            "description": "Updates a selling invoice, including optional discountAmount and shippingFees. Send the full items array when replacing invoice lines, especially for invoices that contain more than one item.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1207,7 +1207,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-13\",\n  \"discountPercentage\": 5,\n  \"shippingFees\": 20,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 3,\n      \"price\": 15\n    }\n  ]\n}"
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-13\",\n  \"discountAmount\": 5,\n  \"shippingFees\": 20,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 3,\n      \"price\": 15\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",

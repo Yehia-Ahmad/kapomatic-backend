@@ -78,9 +78,13 @@ const sellingSchema = new mongoose.Schema(
       type: Number,
       min: [0, "إجمالي الكمية لا يمكن أن يكون سالبًا"],
     },
+    discountAmount: {
+      type: Number,
+      min: [0, "قيمة الخصم لا يمكن أن تكون سالبة"],
+    },
+    // Legacy field kept optional so older percentage-based records still load safely.
     discountPercentage: {
       type: Number,
-      default: 0,
       min: [0, "نسبة الخصم لا يمكن أن تكون سالبة"],
       max: [100, "نسبة الخصم لا يمكن أن تتجاوز 100"],
     },

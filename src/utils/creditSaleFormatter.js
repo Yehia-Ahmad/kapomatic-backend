@@ -1,3 +1,5 @@
+const { buildInvoiceTotals } = require("./invoicePricing");
+
 const getCreditSaleItemProductId = (item) => {
   if (
     item.product &&
@@ -86,6 +88,11 @@ const toCreditSaleInvoice = (creditSale, options = {}) => {
   const refunds = Array.isArray(creditSale.refunds)
     ? creditSale.refunds.map((refund) => toCreditSaleRefund(refund, options))
     : [];
+  const totals = buildInvoiceTotals(items, {
+    discountAmount: creditSale.discountAmount,
+    discountPercentage: creditSale.discountPercentage,
+    shippingFees: creditSale.shippingFees,
+  });
 
   return {
     _id: creditSale._id,
@@ -99,10 +106,10 @@ const toCreditSaleInvoice = (creditSale, options = {}) => {
     notes: creditSale.notes ?? null,
     itemCount: items.length,
     refundCount: refunds.length,
-    totalQuantity: creditSale.totalQuantity,
-    discountPercentage: creditSale.discountPercentage ?? 0,
-    shippingFees: creditSale.shippingFees ?? 0,
-    totalPrice: creditSale.totalPrice,
+    totalQuantity: creditSale.totalQuantity ?? totals.totalQuantity,
+    discountAmount: totals.discountAmount,
+    shippingFees: creditSale.shippingFees ?? totals.shippingFees,
+    totalPrice: creditSale.totalPrice ?? totals.totalPrice,
     paidAmount: creditSale.paidAmount,
     remainingAmount: creditSale.remainingAmount,
     refundDueAmount: creditSale.refundDueAmount ?? 0,
