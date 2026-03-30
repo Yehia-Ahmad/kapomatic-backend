@@ -147,6 +147,9 @@ The customer create/update endpoints also accept `customerName` and `customerPho
 - `creditSummary`
 - `creditHistory`
 
+`GET /api/customers` returns each customer with:
+- `isIndebted`: `true` when the customer has at least one open credit invoice with a remaining balance
+
 Each entry in `creditHistory` is a normalized credit-sale invoice tied to that customer.
 
 `creditSummary` includes:

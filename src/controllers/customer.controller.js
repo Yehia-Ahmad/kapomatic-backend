@@ -262,9 +262,36 @@ const getCustomers = asyncHandler(async (req, res) => {
   }
 
   const query = filters.length > 0 ? { $and: filters } : {};
-  const customers = await Customer.find(query).sort({ createdAt: -1 });
+  const customers = await Customer.find(query).sort({ createdAt: -1 }).lean();
 
-  res.json(customers);
+  if (customers.length === 0) {
+    return res.json([]);
+  }
+
+  const indebtedCustomers = await CreditSale.aggregate([
+    {
+      $match: {
+        customer: { $in: customers.map((customer) => customer._id) },
+        remainingAmount: { $gt: 0 },
+        status: { $in: OPEN_CREDIT_SALE_STATUSES },
+      },
+    },
+    {
+      $group: {
+        _id: "$customer",
+      },
+    },
+  ]);
+  const indebtedCustomerIds = new Set(
+    indebtedCustomers.map((customer) => String(customer._id))
+  );
+
+  res.json(
+    customers.map((customer) => ({
+      ...customer,
+      isIndebted: indebtedCustomerIds.has(String(customer._id)),
+    }))
+  );
 });
 
 const getCustomerById = asyncHandler(async (req, res) => {
