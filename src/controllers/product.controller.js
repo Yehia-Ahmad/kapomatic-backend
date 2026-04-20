@@ -1,8 +1,13 @@
+const mongoose = require("mongoose");
 const Category = require("../models/category.model");
+const CreditSale = require("../models/creditSale.model");
 const Product = require("../models/product.model");
+const Selling = require("../models/selling.model");
 const asyncHandler = require("../utils/asyncHandler");
+const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const isTruthyFlag = (value) => {
   if (typeof value === "string") {
     const normalizedValue = value.trim().toLowerCase();
@@ -10,6 +15,304 @@ const isTruthyFlag = (value) => {
   }
 
   return value === true || value === 1;
+};
+
+const parseOptionalObjectId = (value, fieldLabel, res) => {
+  if (value === undefined) return undefined;
+
+  if (typeof value !== "string" || !mongoose.Types.ObjectId.isValid(value)) {
+    res.status(400);
+    throw new Error(`تنسيق ${fieldLabel} غير صالح`);
+  }
+
+  return value;
+};
+
+const parseOptionalDate = (value, fieldLabel, res, endOfDay = false) => {
+  if (value === undefined) return undefined;
+
+  if (typeof value !== "string" || !value.trim()) {
+    res.status(400);
+    throw new Error(`${fieldLabel} غير صالح`);
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    res.status(400);
+    throw new Error(`تنسيق ${fieldLabel} غير صالح`);
+  }
+
+  if (endOfDay) {
+    parsedDate.setUTCHours(23, 59, 59, 999);
+  } else {
+    parsedDate.setUTCHours(0, 0, 0, 0);
+  }
+
+  return parsedDate;
+};
+
+const parseOptionalBodyDate = (value, fieldLabel, res, endOfDay = false) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  return parseOptionalDate(String(value), fieldLabel, res, endOfDay);
+};
+
+const normalizeYear = (value, res) => {
+  if (value === undefined) {
+    return new Date().getUTCFullYear();
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    res.status(400);
+    throw new Error("يجب أن تكون قيمة year رقمًا صحيحًا موجبًا");
+  }
+
+  return parsed;
+};
+
+const getSellingItemProductId = (item) => {
+  if (item.product && typeof item.product === "object" && item.product._id !== undefined) {
+    return item.product._id;
+  }
+
+  return item.product;
+};
+
+const getSellingItems = (selling) => {
+  if (Array.isArray(selling.items) && selling.items.length > 0) {
+    return selling.items;
+  }
+
+  if (!selling.product) {
+    return [];
+  }
+
+  return [
+    {
+      _id: selling._id,
+      product: selling.product,
+      productName: selling.productName,
+      categoryName: selling.categoryName,
+      quantity: selling.quantity,
+      unitPrice: selling.unitPrice,
+      totalPrice:
+        selling.unitPrice !== undefined && selling.quantity !== undefined
+          ? roundMoney(Number(selling.unitPrice || 0) * Number(selling.quantity || 0))
+          : roundMoney(Number(selling.totalPrice || 0)),
+      purchasePrice: 0,
+      profitAmount: 0,
+    },
+  ];
+};
+
+const getCreditSaleItemProductId = (item) => {
+  if (item.product && typeof item.product === "object" && item.product._id !== undefined) {
+    return item.product._id;
+  }
+
+  return item.product;
+};
+
+const allocateItemDiscounts = (items, discountAmount) => {
+  const normalizedDiscountAmount = roundMoney(discountAmount || 0);
+  const subtotal = roundMoney(items.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0));
+
+  if (normalizedDiscountAmount <= 0 || subtotal <= 0 || items.length === 0) {
+    return items.map(() => 0);
+  }
+
+  let remainingDiscount = normalizedDiscountAmount;
+
+  return items.map((item, index) => {
+    if (index === items.length - 1) {
+      return roundMoney(remainingDiscount);
+    }
+
+    const allocatedDiscount = roundMoney(
+      (normalizedDiscountAmount * Number(item.totalPrice || 0)) / subtotal
+    );
+    remainingDiscount = roundMoney(remainingDiscount - allocatedDiscount);
+    return allocatedDiscount;
+  });
+};
+
+const buildProductProfitReportRow = (product) => ({
+  productId: product._id,
+  productName: product.name,
+  categoryId: product.category?._id ?? null,
+  categoryName: product.category?.name ?? "Uncategorized",
+  purchasePrice: roundMoney(Number(product.purchasePrice ?? product.wholesalePrice ?? 0)),
+  totalProfit: 0,
+  profitValue: 0,
+  lastSellingDate: null,
+  lastSellingPrice: null,
+  invoices: [],
+});
+
+const updateRowLatestSelling = (row, sellingDate, sellingPrice) => {
+  const normalizedSellingPrice = roundMoney(sellingPrice || 0);
+
+  if (!row.lastSellingDate || new Date(sellingDate) > new Date(row.lastSellingDate)) {
+    row.lastSellingDate = sellingDate;
+    row.lastSellingPrice = normalizedSellingPrice;
+  }
+};
+
+const addInvoiceToProductProfitReport = ({
+  row,
+  invoiceId,
+  invoiceType,
+  sellingDate,
+  quantity,
+  sellingPrice,
+  revenue,
+  purchasePrice,
+  profit,
+}) => {
+  row.totalProfit = roundMoney(Number(row.totalProfit || 0) + Number(profit || 0));
+  row.profitValue = row.totalProfit;
+  updateRowLatestSelling(row, sellingDate, sellingPrice);
+
+  const existingInvoice = row.invoices.find(
+    (invoice) => invoice.type === invoiceType && String(invoice.invoiceId) === String(invoiceId)
+  );
+
+  if (existingInvoice) {
+    const nextQuantity = Number(existingInvoice.quantity || 0) + Number(quantity || 0);
+    const grossAmount =
+      Number(existingInvoice.sellingPrice || 0) * Number(existingInvoice.quantity || 0) +
+      Number(sellingPrice || 0) * Number(quantity || 0);
+
+    existingInvoice.quantity = nextQuantity;
+    existingInvoice.sellingPrice = nextQuantity > 0 ? roundMoney(grossAmount / nextQuantity) : 0;
+    existingInvoice.revenue = roundMoney(Number(existingInvoice.revenue || 0) + Number(revenue || 0));
+    existingInvoice.profit = roundMoney(Number(existingInvoice.profit || 0) + Number(profit || 0));
+    return;
+  }
+
+  row.invoices.push({
+    invoiceId,
+    type: invoiceType,
+    sellingDate,
+    sellingPrice: roundMoney(sellingPrice || 0),
+    quantity: Number(quantity || 0),
+    revenue: roundMoney(revenue || 0),
+    purchasePrice: roundMoney(purchasePrice || 0),
+    profit: roundMoney(profit || 0),
+  });
+};
+
+const buildProductProfitRows = async ({ products, startDate, endDate }) => {
+  const rows = products.map(buildProductProfitReportRow);
+  const rowsByProductId = new Map(rows.map((row) => [row.productId.toString(), row]));
+  const productIds = [...rowsByProductId.keys()];
+
+  if (productIds.length === 0) {
+    return rows;
+  }
+
+  const dateQuery = {};
+  if (startDate || endDate) {
+    dateQuery.sellingDate = {};
+    if (startDate) dateQuery.sellingDate.$gte = startDate;
+    if (endDate) dateQuery.sellingDate.$lte = endDate;
+  }
+
+  const [sellings, creditSales] = await Promise.all([
+    Selling.find({
+      ...dateQuery,
+      $or: [{ "items.product": { $in: productIds } }, { product: { $in: productIds } }],
+    }).lean(),
+    CreditSale.find({
+      ...dateQuery,
+      "items.product": { $in: productIds },
+    }).lean(),
+  ]);
+
+  for (const selling of sellings) {
+    const items = getSellingItems(selling);
+    const invoiceTotals = buildInvoiceTotals(items, {
+      discountAmount: selling.discountAmount,
+      discountPercentage: selling.discountPercentage,
+      shippingFees: selling.shippingFees,
+    });
+    const itemDiscounts = allocateItemDiscounts(items, invoiceTotals.discountAmount);
+
+    items.forEach((item, index) => {
+      const productId = getSellingItemProductId(item)?.toString();
+      const row = rowsByProductId.get(productId);
+      if (!row) return;
+
+      const quantity = Number(item.quantity || 0);
+      const sellingPrice = roundMoney(Number(item.unitPrice || 0));
+      const totalPrice = roundMoney(Number(item.totalPrice || 0));
+      const purchasePrice = roundMoney(Number(item.purchasePrice ?? 0));
+      const revenue = roundMoney(totalPrice - Number(itemDiscounts[index] || 0));
+      const profit =
+        item.profitAmount !== undefined && item.profitAmount !== null
+          ? roundMoney(Number(item.profitAmount || 0) - Number(itemDiscounts[index] || 0))
+          : roundMoney(revenue - purchasePrice * quantity);
+
+      addInvoiceToProductProfitReport({
+        row,
+        invoiceId: selling.invoiceId ?? selling._id,
+        invoiceType: "cash",
+        sellingDate: selling.sellingDate,
+        quantity,
+        sellingPrice,
+        revenue,
+        purchasePrice,
+        profit,
+      });
+    });
+  }
+
+  for (const creditSale of creditSales) {
+    const items = Array.isArray(creditSale.items) ? creditSale.items : [];
+    const invoiceTotals = buildInvoiceTotals(items, {
+      discountAmount: creditSale.discountAmount,
+      discountPercentage: creditSale.discountPercentage,
+      shippingFees: creditSale.shippingFees,
+    });
+    const itemDiscounts = allocateItemDiscounts(items, invoiceTotals.discountAmount);
+
+    items.forEach((item, index) => {
+      const productId = getCreditSaleItemProductId(item)?.toString();
+      const row = rowsByProductId.get(productId);
+      if (!row) return;
+
+      const quantity = Number(item.quantity || 0);
+      const sellingPrice = roundMoney(Number(item.unitPrice || 0));
+      const totalPrice = roundMoney(Number(item.totalPrice || 0));
+      const purchasePrice = roundMoney(Number(item.purchasePrice ?? 0));
+      const revenue = roundMoney(totalPrice - Number(itemDiscounts[index] || 0));
+      const profit =
+        item.profitAmount !== undefined && item.profitAmount !== null
+          ? roundMoney(Number(item.profitAmount || 0) - Number(itemDiscounts[index] || 0))
+          : roundMoney(revenue - purchasePrice * quantity);
+
+      addInvoiceToProductProfitReport({
+        row,
+        invoiceId: creditSale._id,
+        invoiceType: "credit",
+        sellingDate: creditSale.sellingDate,
+        quantity,
+        sellingPrice,
+        revenue,
+        purchasePrice,
+        profit,
+      });
+    });
+  }
+
+  rows.forEach((row) => {
+    row.invoices.sort((left, right) => new Date(right.sellingDate) - new Date(left.sellingDate));
+  });
+
+  return rows;
 };
 
 const getProducts = asyncHandler(async (req, res) => {
@@ -85,6 +388,7 @@ const createProduct = asyncHandler(async (req, res) => {
     imageBase64,
     categoryId,
     wholesalePrice,
+    purchasePrice,
     retailPrice,
     soldItemCount,
   } = req.body;
@@ -98,6 +402,28 @@ const createProduct = asyncHandler(async (req, res) => {
   if (Number(retailPrice) < Number(wholesalePrice)) {
     res.status(400);
     throw new Error("يجب أن يكون سعر التجزئة أكبر من أو يساوي سعر الجملة");
+  }
+
+  const normalizedWholesalePrice = Number(wholesalePrice);
+  const normalizedRetailPrice = Number(retailPrice);
+  const normalizedPurchasePrice =
+    purchasePrice !== undefined ? Number(purchasePrice) : Number(wholesalePrice || 0);
+  if (!Number.isFinite(normalizedPurchasePrice) || normalizedPurchasePrice < 0) {
+    res.status(400);
+    throw new Error("يجب أن تكون قيمة purchasePrice رقمًا غير سالب");
+  }
+
+  if (
+    Number.isFinite(normalizedWholesalePrice) &&
+    normalizedPurchasePrice > normalizedWholesalePrice
+  ) {
+    res.status(400);
+    throw new Error("لا يمكن أن تكون قيمة سعر الشراء أكبر من سعر الوحدة بالجملة");
+  }
+
+  if (Number.isFinite(normalizedRetailPrice) && normalizedPurchasePrice > normalizedRetailPrice) {
+    res.status(400);
+    throw new Error("لا يمكن أن تكون قيمة سعر الشراء أكبر من سعر الوحدة بالتجزئة");
   }
 
   const normalizedImage = imageBase64 !== undefined ? imageBase64 : image;
@@ -133,6 +459,7 @@ const createProduct = asyncHandler(async (req, res) => {
     inventoryCount: normalizedInventoryCount,
     category: categoryId,
     wholesalePrice,
+    purchasePrice: normalizedPurchasePrice,
     retailPrice,
   };
 
@@ -170,10 +497,33 @@ const updateProduct = asyncHandler(async (req, res) => {
   const nextWholesale =
     req.body.wholesalePrice !== undefined ? req.body.wholesalePrice : product.wholesalePrice;
   const nextRetail = req.body.retailPrice !== undefined ? req.body.retailPrice : product.retailPrice;
+  const nextPurchase =
+    req.body.purchasePrice !== undefined ? req.body.purchasePrice : product.purchasePrice;
 
   if (Number(nextRetail) < Number(nextWholesale)) {
     res.status(400);
     throw new Error("يجب أن يكون سعر التجزئة أكبر من أو يساوي سعر الجملة");
+  }
+
+  const normalizedNextPurchase = Number(nextPurchase ?? 0);
+  if (!Number.isFinite(normalizedNextPurchase) || normalizedNextPurchase < 0) {
+    res.status(400);
+    throw new Error("يجب أن تكون قيمة purchasePrice رقمًا غير سالب");
+  }
+
+  const normalizedNextWholesale = Number(nextWholesale);
+  if (
+    Number.isFinite(normalizedNextWholesale) &&
+    normalizedNextPurchase > normalizedNextWholesale
+  ) {
+    res.status(400);
+    throw new Error("لا يمكن أن تكون قيمة سعر الشراء أكبر من سعر الوحدة بالجملة");
+  }
+
+  const normalizedNextRetail = Number(nextRetail);
+  if (Number.isFinite(normalizedNextRetail) && normalizedNextPurchase > normalizedNextRetail) {
+    res.status(400);
+    throw new Error("لا يمكن أن تكون قيمة سعر الشراء أكبر من سعر الوحدة بالتجزئة");
   }
 
   if (req.body.name !== undefined) product.name = req.body.name;
@@ -241,7 +591,6 @@ const updateProduct = asyncHandler(async (req, res) => {
       throw new Error("لا يمكن أن تكون قيمة soldItemCount سالبة");
     }
 
-    // Rebalance available stock when the edit payload is based on the current stored inventory.
     const shouldAdjustInventoryForSoldCount =
       !hasPayloadInventoryCount || normalizedPayloadInventoryCount === currentInventoryCount;
 
@@ -264,12 +613,166 @@ const updateProduct = asyncHandler(async (req, res) => {
     product.image = req.body.image;
   }
   if (req.body.wholesalePrice !== undefined) product.wholesalePrice = req.body.wholesalePrice;
+  if (req.body.purchasePrice !== undefined) product.purchasePrice = req.body.purchasePrice;
   if (req.body.retailPrice !== undefined) product.retailPrice = req.body.retailPrice;
 
   const updatedProduct = await product.save();
   await updatedProduct.populate("category", "name image");
 
   res.json(updatedProduct);
+});
+
+const getProductsProfitReport = asyncHandler(async (req, res) => {
+  const categoryId = parseOptionalObjectId(req.query.categoryId, "معرّف الفئة", res);
+  const productId = parseOptionalObjectId(req.query.productId, "معرّف المنتج", res);
+  const dateFrom = parseOptionalDate(req.query.dateFrom, "dateFrom", res);
+  const dateTo = parseOptionalDate(req.query.dateTo, "dateTo", res, true);
+
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    res.status(400);
+    throw new Error("يجب أن يكون dateFrom أقدم من أو مساويًا لـ dateTo");
+  }
+
+  const query = {};
+  if (categoryId) query.category = categoryId;
+  if (productId) query._id = productId;
+
+  const products = await Product.find(query).populate("category", "name image").sort({ name: 1 });
+
+  if (productId && products.length === 0) {
+    res.status(404);
+    throw new Error("المنتج غير موجود");
+  }
+
+  const report = await buildProductProfitRows({
+    products,
+    startDate: dateFrom,
+    endDate: dateTo,
+  });
+
+  res.json(report);
+});
+
+const getProductProfitReportById = asyncHandler(async (req, res) => {
+  req.query.productId = req.params.id;
+  return getProductsProfitReport(req, res);
+});
+
+const syncProductPurchasePriceToInvoices = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id).populate("category", "name");
+
+  if (!product) {
+    res.status(404);
+    throw new Error("المنتج غير موجود");
+  }
+
+  const dateFrom = parseOptionalBodyDate(req.body.dateFrom, "dateFrom", res);
+  const dateTo = parseOptionalBodyDate(req.body.dateTo, "dateTo", res, true);
+
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    res.status(400);
+    throw new Error("يجب أن يكون dateFrom أقدم من أو مساويًا لـ dateTo");
+  }
+
+  const purchasePrice = roundMoney(Number(product.purchasePrice ?? product.wholesalePrice ?? 0));
+  const dateQuery = {};
+
+  if (dateFrom || dateTo) {
+    dateQuery.sellingDate = {};
+    if (dateFrom) dateQuery.sellingDate.$gte = dateFrom;
+    if (dateTo) dateQuery.sellingDate.$lte = dateTo;
+  }
+
+  const [sellings, creditSales] = await Promise.all([
+    Selling.find({
+      ...dateQuery,
+      $or: [{ "items.product": product._id }, { product: product._id }],
+    }),
+    CreditSale.find({
+      ...dateQuery,
+      "items.product": product._id,
+    }),
+  ]);
+
+  let updatedCashInvoices = 0;
+  let updatedCreditInvoices = 0;
+  let updatedItemsCount = 0;
+
+  for (const selling of sellings) {
+    let didUpdateInvoice = false;
+
+    if (Array.isArray(selling.items) && selling.items.length > 0) {
+      for (const item of selling.items) {
+        if (String(getSellingItemProductId(item)) !== String(product._id)) continue;
+
+        const quantity = Number(item.quantity || 0);
+        item.purchasePrice = purchasePrice;
+        item.profitAmount = roundMoney(Number(item.totalPrice || 0) - purchasePrice * quantity);
+        updatedItemsCount += 1;
+        didUpdateInvoice = true;
+      }
+    } else if (selling.product && String(selling.product) === String(product._id)) {
+      const quantity = Number(selling.quantity || 0);
+      const unitPrice = Number(selling.unitPrice || 0);
+      const totalPrice =
+        selling.totalPrice !== undefined && selling.totalPrice !== null
+          ? roundMoney(Number(selling.totalPrice || 0))
+          : roundMoney(unitPrice * quantity);
+
+      selling.items = [
+        {
+          _id: new mongoose.Types.ObjectId(),
+          product: product._id,
+          productName: selling.productName ?? product.name,
+          categoryName: selling.categoryName ?? product.category?.name ?? "Uncategorized",
+          quantity,
+          unitPrice,
+          totalPrice,
+          purchasePrice,
+          profitAmount: roundMoney(totalPrice - purchasePrice * quantity),
+        },
+      ];
+      updatedItemsCount += 1;
+      didUpdateInvoice = true;
+    }
+
+    if (didUpdateInvoice) {
+      await selling.save();
+      updatedCashInvoices += 1;
+    }
+  }
+
+  for (const creditSale of creditSales) {
+    let didUpdateInvoice = false;
+
+    for (const item of creditSale.items) {
+      if (String(getCreditSaleItemProductId(item)) !== String(product._id)) continue;
+
+      const quantity = Number(item.quantity || 0);
+      item.purchasePrice = purchasePrice;
+      item.profitAmount = roundMoney(Number(item.totalPrice || 0) - purchasePrice * quantity);
+      updatedItemsCount += 1;
+      didUpdateInvoice = true;
+    }
+
+    if (didUpdateInvoice) {
+      await creditSale.save();
+      updatedCreditInvoices += 1;
+    }
+  }
+
+  res.json({
+    message: "Purchase price synced to matching invoices successfully",
+    productId: product._id,
+    productName: product.name,
+    purchasePrice,
+    dateFrom: dateFrom ?? null,
+    dateTo: dateTo ?? null,
+    updatedCashInvoices,
+    updatedCreditInvoices,
+    updatedInvoices: updatedCashInvoices + updatedCreditInvoices,
+    updatedItemsCount,
+  });
 });
 
 const deleteProduct = asyncHandler(async (req, res) => {
@@ -284,10 +787,120 @@ const deleteProduct = asyncHandler(async (req, res) => {
   res.json({ message: "Product deleted successfully" });
 });
 
+const getYearProfitBarChart = asyncHandler(async (req, res) => {
+  const year = normalizeYear(req.query.year, res);
+  const startDate = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+  const endDate = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
+
+  const basePipeline = [
+    {
+      $match: {
+        sellingDate: {
+          $gte: startDate,
+          $lt: endDate,
+        },
+      },
+    },
+    {
+      $project: {
+        month: { $month: "$sellingDate" },
+        discountAmount: { $ifNull: ["$discountAmount", 0] },
+        itemsProfit: {
+          $sum: {
+            $map: {
+              input: { $ifNull: ["$items", []] },
+              as: "item",
+              in: { $ifNull: ["$$item.profitAmount", 0] },
+            },
+          },
+        },
+      },
+    },
+    {
+      $group: {
+        _id: "$month",
+        profit: {
+          $sum: {
+            $subtract: ["$itemsProfit", "$discountAmount"],
+          },
+        },
+      },
+    },
+    { $sort: { _id: 1 } },
+  ];
+
+  const [cashRows, creditRows] = await Promise.all([
+    Selling.aggregate(basePipeline),
+    CreditSale.aggregate(basePipeline),
+  ]);
+
+  const monthLabels = [
+    { label: "Jan", labelAr: "يناير" },
+    { label: "Feb", labelAr: "فبراير" },
+    { label: "Mar", labelAr: "مارس" },
+    { label: "Apr", labelAr: "أبريل" },
+    { label: "May", labelAr: "مايو" },
+    { label: "Jun", labelAr: "يونيو" },
+    { label: "Jul", labelAr: "يوليو" },
+    { label: "Aug", labelAr: "أغسطس" },
+    { label: "Sep", labelAr: "سبتمبر" },
+    { label: "Oct", labelAr: "أكتوبر" },
+    { label: "Nov", labelAr: "نوفمبر" },
+    { label: "Dec", labelAr: "ديسمبر" },
+  ];
+
+  const profitByMonth = Array.from({ length: 12 }, () => ({
+    profit: 0,
+    cashProfit: 0,
+    creditProfit: 0,
+  }));
+
+  for (const row of cashRows) {
+    const monthIndex = Number(row._id || 0) - 1;
+    if (monthIndex < 0 || monthIndex >= 12) continue;
+    const profit = roundMoney(Number(row.profit || 0));
+    profitByMonth[monthIndex].cashProfit = roundMoney(
+      profitByMonth[monthIndex].cashProfit + profit
+    );
+    profitByMonth[monthIndex].profit = roundMoney(profitByMonth[monthIndex].profit + profit);
+  }
+
+  for (const row of creditRows) {
+    const monthIndex = Number(row._id || 0) - 1;
+    if (monthIndex < 0 || monthIndex >= 12) continue;
+    const profit = roundMoney(Number(row.profit || 0));
+    profitByMonth[monthIndex].creditProfit = roundMoney(
+      profitByMonth[monthIndex].creditProfit + profit
+    );
+    profitByMonth[monthIndex].profit = roundMoney(profitByMonth[monthIndex].profit + profit);
+  }
+
+  const months = monthLabels.map((labels, index) => ({
+    month: index + 1,
+    label: labels.label,
+    labelAr: labels.labelAr,
+    profit: profitByMonth[index].profit,
+    cashProfit: profitByMonth[index].cashProfit,
+    creditProfit: profitByMonth[index].creditProfit,
+  }));
+
+  res.json({
+    year,
+    startDate,
+    endDate,
+    totalProfit: roundMoney(months.reduce((sum, month) => sum + Number(month.profit || 0), 0)),
+    months,
+  });
+});
+
 module.exports = {
   getProducts,
   searchProducts,
   getProductById,
+  getProductsProfitReport,
+  getProductProfitReportById,
+  syncProductPurchasePriceToInvoices,
+  getYearProfitBarChart,
   createProduct,
   updateProduct,
   deleteProduct,

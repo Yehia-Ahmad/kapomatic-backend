@@ -21,6 +21,7 @@ Backend API for a warehouse system with:
 - `image` (required, base64 string in raw or data URI format)
 - `categoryId` (required, must exist in categories)
 - `wholesalePrice` (required)
+- `purchasePrice` (optional, defaults to `wholesalePrice`)
 - `retailPrice` (required, must be >= wholesale price)
 - `soldItemCount` (optional, defaults to `0`)
 
@@ -102,6 +103,9 @@ Sample category payload:
 - `GET /api/products?categoryId=<category_id>`
 - `GET /api/products/search?q=<code_or_part_of_name>`
 - `GET /api/products/:id`
+- `GET /api/products/profit-report?categoryId=<category_id>&productId=<product_id>&dateFrom=<YYYY-MM-DD>&dateTo=<YYYY-MM-DD>`
+- `GET /api/products/:id/profit-report?dateFrom=<YYYY-MM-DD>&dateTo=<YYYY-MM-DD>`
+- `POST /api/products/:id/sync-purchase-price`
 - `POST /api/products`
 - `PUT /api/products/:id`
 - `DELETE /api/products/:id`
@@ -115,10 +119,33 @@ Sample product payload:
   "imageBase64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA",
   "categoryId": "66b0b7b5a8c197aa0adf1234",
   "wholesalePrice": 8.5,
+  "purchasePrice": 7.25,
   "retailPrice": 15,
   "soldItemCount": 10
 }
 ```
+
+Product profit report rows contain:
+- `productName`
+- `categoryName`
+- `totalProfit`
+- `profitValue`
+- `lastSellingDate`
+- `lastSellingPrice`
+- `invoices` array with `invoiceId`, `type`, `sellingDate`, `sellingPrice`, `quantity`, `revenue`, `purchasePrice`, and `profit`
+
+Profit is calculated from each product invoice item using the stored `purchasePrice`. If `dateFrom` and `dateTo` are omitted, the report includes all invoices.
+
+`POST /api/products/:id/sync-purchase-price` copies the product's current `purchasePrice` into matching cash and credit invoice items, then recalculates each matched item's stored `profitAmount`. Send optional JSON body:
+
+```json
+{
+  "dateFrom": "2026-03-01",
+  "dateTo": "2026-03-31"
+}
+```
+
+If `dateFrom` and `dateTo` are omitted, all invoices for that product are updated across the system.
 
 ### Customers
 - `GET /api/customers`

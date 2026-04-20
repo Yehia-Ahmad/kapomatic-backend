@@ -18,6 +18,16 @@ const MONEY_EPSILON = 1e-9;
 
 const getFirstDefined = (...values) => values.find((value) => value !== undefined);
 
+const resolveItemPurchasePrice = (item, product) => {
+  const rawPurchasePrice =
+    item.purchasePrice !== undefined
+      ? item.purchasePrice
+      : product?.purchasePrice ?? product?.wholesalePrice ?? 0;
+  const purchasePrice = Number(rawPurchasePrice);
+
+  return Number.isFinite(purchasePrice) ? roundMoney(Math.max(0, purchasePrice)) : 0;
+};
+
 const getRawQuantity = (body) => {
   if (body.quantity !== undefined) return body.quantity;
   if (body.quentity !== undefined) return body.quentity;
@@ -387,6 +397,7 @@ const toCreditSaleItemInput = (item) => ({
   productId: getCreditSaleItemProductId(item)?.toString(),
   quantity: Number(item.quantity),
   unitPrice: Number(item.unitPrice),
+  purchasePrice: Number(item.purchasePrice ?? 0),
 });
 
 const getCreditSaleItemInputs = (creditSale) =>
@@ -446,6 +457,22 @@ const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) 
     }
   }
 
+  for (const item of nextItems) {
+    const productId = item.productId?.toString();
+    if (!productId) continue;
+
+    const product = productsById.get(productId);
+    if (!product) continue;
+
+    const purchasePrice = resolveItemPurchasePrice(item, product);
+    const unitPrice = roundMoney(Number(item.unitPrice || 0));
+
+    if (unitPrice < purchasePrice) {
+      res.status(400);
+      throw new Error(`سعر البيع لا يمكن أن يكون أقل من سعر الشراء للمنتج ${product.name}`);
+    }
+  }
+
   try {
     for (const productId of allProductIds) {
       const product = productsById.get(productId);
@@ -487,6 +514,9 @@ const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) 
 const buildPersistedItems = (items, productsById) =>
   items.map((item) => {
     const product = productsById.get(item.productId.toString());
+    const purchasePrice = resolveItemPurchasePrice(item, product);
+    const totalPrice = roundMoney(item.unitPrice * item.quantity);
+    const totalCost = roundMoney(purchasePrice * item.quantity);
 
     return {
       product: product._id,
@@ -494,7 +524,9 @@ const buildPersistedItems = (items, productsById) =>
       categoryName: product.category ? product.category.name : "Uncategorized",
       quantity: item.quantity,
       unitPrice: item.unitPrice,
-      totalPrice: roundMoney(item.unitPrice * item.quantity),
+      totalPrice,
+      purchasePrice,
+      profitAmount: roundMoney(totalPrice - totalCost),
     };
   });
 

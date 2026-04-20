@@ -67,6 +67,8 @@ const toCreditSaleInvoiceItem = (item, creditSale, options = {}) => {
     customerName: creditSale.customerName,
     customerPhone: creditSale.customerPhone,
     productPricePerEach: item.unitPrice,
+    purchasePrice: item.purchasePrice ?? 0,
+    profitAmount: item.profitAmount ?? 0,
     totalPrice: item.totalPrice,
   };
 
@@ -110,6 +112,11 @@ const toCreditSaleInvoice = (creditSale, options = {}) => {
     discountAmount: totals.discountAmount,
     shippingFees: creditSale.shippingFees ?? totals.shippingFees,
     totalPrice: creditSale.totalPrice ?? totals.totalPrice,
+    totalProfit: Number(
+      (
+        items.reduce((sum, item) => sum + Number(item.profitAmount || 0), 0) - totals.discountAmount
+      ).toFixed(2)
+    ),
     paidAmount: creditSale.paidAmount,
     remainingAmount: creditSale.remainingAmount,
     refundDueAmount: creditSale.refundDueAmount ?? 0,

@@ -39,6 +39,30 @@ const productSchema = new mongoose.Schema(
       required: [true, "سعر الجملة مطلوب"],
       min: [0, "سعر الجملة لا يمكن أن يكون سالبًا"],
     },
+    purchasePrice: {
+      type: Number,
+      default: 0,
+      min: [0, "سعر الشراء لا يمكن أن يكون سالبًا"],
+      validate: {
+        validator: function validatePurchasePrice(value) {
+          const purchasePrice = Number(value);
+          if (!Number.isFinite(purchasePrice)) return false;
+
+          const wholesalePrice = Number(this.wholesalePrice);
+          if (Number.isFinite(wholesalePrice) && purchasePrice > wholesalePrice) {
+            return false;
+          }
+
+          const retailPrice = Number(this.retailPrice);
+          if (Number.isFinite(retailPrice) && purchasePrice > retailPrice) {
+            return false;
+          }
+
+          return true;
+        },
+        message: "سعر الشراء لا يمكن أن يكون أكبر من سعر الجملة أو التجزئة",
+      },
+    },
     retailPrice: {
       type: Number,
       required: [true, "سعر التجزئة مطلوب"],

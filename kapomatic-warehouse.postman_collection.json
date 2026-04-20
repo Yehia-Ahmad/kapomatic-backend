@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, and sellings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Create Selling auto-creates or updates the customer by customerName and customerPhone, stores one invoice document with an items array, returns discountAmount and shippingFees, and Get All Sellings returns invoice items with productCode."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, and sellings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Products now support purchasePrice and profit report endpoints. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
   },
   "item": [
     {
@@ -528,6 +528,131 @@
           "response": []
         },
         {
+          "name": "Get Products Profit Report",
+          "request": {
+            "method": "GET",
+            "description": "Returns all product profit rows with optional filters. dateFrom and dateTo are optional.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/profit-report?categoryId={{categoryId}}&productId={{productId}}&dateFrom={{profitDateFrom}}&dateTo={{profitDateTo}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "profit-report"
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}"
+                },
+                {
+                  "key": "productId",
+                  "value": "{{productId}}"
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "{{profitDateFrom}}"
+                },
+                {
+                  "key": "dateTo",
+                  "value": "{{profitDateTo}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product Profit Report By ID",
+          "request": {
+            "method": "GET",
+            "description": "Returns one product profit row including lastSellingDate, lastSellingPrice, and related invoices.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{productId}}/profit-report?dateFrom={{profitDateFrom}}&dateTo={{profitDateTo}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}",
+                "profit-report"
+              ],
+              "query": [
+                {
+                  "key": "dateFrom",
+                  "value": "{{profitDateFrom}}"
+                },
+                {
+                  "key": "dateTo",
+                  "value": "{{profitDateTo}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Year Profit Bar Chart",
+          "request": {
+            "method": "GET",
+            "description": "Returns monthly profit totals for the provided year aggregated across all products. Defaults to the current year when year is omitted.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/profit-bar?year={{profitYear}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "profit-bar"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "{{profitYear}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Product Purchase Price To Invoices",
+          "request": {
+            "method": "POST",
+            "description": "Copies the product's current purchasePrice into matching cash and credit invoice items, then recalculates stored item profit. dateFrom and dateTo are optional; if omitted, all invoices for the product are updated.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dateFrom\": \"{{profitDateFrom}}\",\n  \"dateTo\": \"{{profitDateTo}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{productId}}/sync-purchase-price",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}",
+                "sync-purchase-price"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Create Product",
           "event": [
             {
@@ -553,7 +678,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"code\": \"WM-001\",\n  \"inventoryCount\": 100,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"retailPrice\": 15,\n  \"soldItemCount\": 10,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"code\": \"WM-001\",\n  \"inventoryCount\": 100,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"purchasePrice\": 7.25,\n  \"retailPrice\": 15,\n  \"soldItemCount\": 10,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products",
@@ -581,7 +706,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"editProduct\": true,\n  \"inventoryCount\": {{productInventoryCount}},\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"editProduct\": true,\n  \"inventoryCount\": {{productInventoryCount}},\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"purchasePrice\": 7.5,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products/{{productId}}",
@@ -1298,6 +1423,18 @@
     {
       "key": "productSearchCode",
       "value": "WM-001"
+    },
+    {
+      "key": "profitDateFrom",
+      "value": "2026-03-01"
+    },
+    {
+      "key": "profitDateTo",
+      "value": "2026-03-31"
+    },
+    {
+      "key": "profitYear",
+      "value": "2026"
     },
     {
       "key": "creditSaleId",

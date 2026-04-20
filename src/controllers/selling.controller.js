@@ -251,6 +251,16 @@ const normalizeSellingItems = (body, res) => {
 
 const hasInvoiceItems = (selling) => Array.isArray(selling.items) && selling.items.length > 0;
 
+const resolveItemPurchasePrice = (item, product) => {
+  const rawPurchasePrice =
+    item.purchasePrice !== undefined
+      ? item.purchasePrice
+      : product?.purchasePrice ?? product?.wholesalePrice ?? 0;
+  const purchasePrice = Number(rawPurchasePrice);
+
+  return Number.isFinite(purchasePrice) ? roundMoney(Math.max(0, purchasePrice)) : 0;
+};
+
 const getSellingItems = (selling) => {
   if (hasInvoiceItems(selling)) {
     return selling.items;
@@ -272,6 +282,8 @@ const getSellingItems = (selling) => {
         selling.unitPrice !== undefined && selling.quantity !== undefined
           ? roundMoney(Number(selling.unitPrice || 0) * Number(selling.quantity || 0))
           : selling.totalPrice,
+      purchasePrice: 0,
+      profitAmount: 0,
     },
   ];
 };
@@ -291,6 +303,8 @@ const toSellingInvoiceItem = (item, selling, options = {}) => {
     customerName: selling.customerName,
     customerPhone: selling.customerPhone ?? null,
     productPricePerEach: item.unitPrice,
+    purchasePrice: item.purchasePrice ?? 0,
+    profitAmount: item.profitAmount ?? 0,
     totalPrice: item.totalPrice,
   };
 
@@ -321,6 +335,9 @@ const toSellingInvoice = (selling, options = {}) => {
     discountAmount: totals.discountAmount,
     shippingFees: selling.shippingFees ?? totals.shippingFees,
     totalPrice: selling.totalPrice ?? totals.totalPrice,
+    totalProfit: roundMoney(
+      items.reduce((sum, item) => sum + Number(item.profitAmount || 0), 0) - totals.discountAmount
+    ),
     items,
   };
 };
@@ -363,6 +380,7 @@ const toSellingItemInput = (item) => ({
   productId: getSellingItemProductId(item)?.toString(),
   quantity: Number(item.quantity),
   unitPrice: Number(item.unitPrice),
+  purchasePrice: Number(item.purchasePrice ?? 0),
 });
 
 const getSellingItemInputs = (selling) =>
@@ -422,6 +440,22 @@ const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) 
     }
   }
 
+  for (const item of nextItems) {
+    const productId = item.productId?.toString();
+    if (!productId) continue;
+
+    const product = productsById.get(productId);
+    if (!product) continue;
+
+    const purchasePrice = resolveItemPurchasePrice(item, product);
+    const unitPrice = roundMoney(Number(item.unitPrice || 0));
+
+    if (unitPrice < purchasePrice) {
+      res.status(400);
+      throw new Error(`سعر البيع لا يمكن أن يكون أقل من سعر الشراء للمنتج ${product.name}`);
+    }
+  }
+
   try {
     for (const productId of allProductIds) {
       const product = productsById.get(productId);
@@ -463,6 +497,9 @@ const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) 
 const buildPersistedItems = (items, productsById) =>
   items.map((item) => {
     const product = productsById.get(item.productId.toString());
+    const purchasePrice = resolveItemPurchasePrice(item, product);
+    const totalPrice = roundMoney(item.unitPrice * item.quantity);
+    const totalCost = roundMoney(purchasePrice * item.quantity);
 
     return {
       product: product._id,
@@ -470,7 +507,9 @@ const buildPersistedItems = (items, productsById) =>
       categoryName: product.category ? product.category.name : "Uncategorized",
       quantity: item.quantity,
       unitPrice: item.unitPrice,
-      totalPrice: roundMoney(item.unitPrice * item.quantity),
+      totalPrice,
+      purchasePrice,
+      profitAmount: roundMoney(totalPrice - totalCost),
     };
   });
 

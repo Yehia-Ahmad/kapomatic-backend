@@ -53,6 +53,15 @@ const creditSaleItemSchema = new mongoose.Schema(
       required: [true, "السعر الإجمالي مطلوب"],
       min: [0, "السعر الإجمالي لا يمكن أن يكون سالبًا"],
     },
+    purchasePrice: {
+      type: Number,
+      default: 0,
+      min: [0, "سعر الشراء لا يمكن أن يكون سالبًا"],
+    },
+    profitAmount: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: true }
 );
