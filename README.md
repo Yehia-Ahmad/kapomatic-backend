@@ -102,6 +102,7 @@ Sample category payload:
 ### Products
 - `GET /api/products?categoryId=<category_id>`
 - `GET /api/products/search?q=<code_or_part_of_name>`
+- `GET /api/products/export/excel`
 - `GET /api/products/:id`
 - `GET /api/products/profit-report?categoryId=<category_id>&productId=<product_id>&dateFrom=<YYYY-MM-DD>&dateTo=<YYYY-MM-DD>`
 - `GET /api/products/:id/profit-report?dateFrom=<YYYY-MM-DD>&dateTo=<YYYY-MM-DD>`

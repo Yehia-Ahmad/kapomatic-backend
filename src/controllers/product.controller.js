@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const ExcelJS = require("exceljs");
 const Category = require("../models/category.model");
 const CreditSale = require("../models/creditSale.model");
 const Product = require("../models/product.model");
@@ -377,6 +378,61 @@ const getProductById = asyncHandler(async (req, res) => {
   }
 
   res.json(product);
+});
+
+const exportProductsExcel = asyncHandler(async (req, res) => {
+  const products = await Product.find({})
+    .populate("category", "name")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("المنتجات", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+
+  worksheet.columns = [
+    { header: "اسم الفئة", key: "categoryName", width: 24 },
+    { header: "اسم المنتج", key: "productName", width: 32 },
+    { header: "سعر الشراء", key: "purchasePrice", width: 16, style: { numFmt: "0.00" } },
+    { header: "سعر الجملة", key: "wholesalePrice", width: 16, style: { numFmt: "0.00" } },
+    { header: "سعر التجزئة", key: "retailPrice", width: 16, style: { numFmt: "0.00" } },
+    { header: "عدد القطع المباعة", key: "soldItemCount", width: 18, style: { numFmt: "0" } },
+    { header: "عدد المخزون", key: "inventoryCount", width: 16, style: { numFmt: "0" } },
+  ];
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+  products.forEach((product) => {
+    worksheet.addRow({
+      categoryName: product.category?.name ?? "Uncategorized",
+      productName: product.name ?? "",
+      purchasePrice: Number(product.purchasePrice ?? product.wholesalePrice ?? 0),
+      wholesalePrice: Number(product.wholesalePrice ?? 0),
+      retailPrice: Number(product.retailPrice ?? 0),
+      soldItemCount: Number(product.soldItemCount ?? 0),
+      inventoryCount: Number(product.inventoryCount ?? 0),
+    });
+  });
+
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    row.alignment = { vertical: "middle", horizontal: "left" };
+  });
+
+  const dateTag = new Date().toISOString().slice(0, 10);
+  const filename = `products-${dateTag}.xlsx`;
+
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+  await workbook.xlsx.write(res);
+  res.end();
 });
 
 const createProduct = asyncHandler(async (req, res) => {
@@ -897,6 +953,7 @@ module.exports = {
   getProducts,
   searchProducts,
   getProductById,
+  exportProductsExcel,
   getProductsProfitReport,
   getProductProfitReportById,
   syncProductPurchasePriceToInvoices,
