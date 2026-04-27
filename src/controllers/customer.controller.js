@@ -527,11 +527,11 @@ const deleteCustomer = asyncHandler(async (req, res) => {
     throw new Error("العميل غير موجود");
   }
 
-  const relatedCreditSale = await CreditSale.exists({ customer: customer._id });
-  if (relatedCreditSale) {
-    res.status(400);
-    throw new Error("لا يمكن حذف العميل لوجود معاملات بيع آجل مرتبطة به");
-  }
+  // const relatedCreditSale = await CreditSale.exists({ customer: customer._id });
+  // if (relatedCreditSale) {
+  //   res.status(400);
+  //   throw new Error("لا يمكن حذف العميل لوجود معاملات بيع آجل مرتبطة به");
+  // }
 
   await customer.deleteOne();
   res.json({ message: "Customer deleted successfully" });
