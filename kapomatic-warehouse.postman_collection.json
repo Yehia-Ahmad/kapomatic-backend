@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, and sellings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Products now support purchasePrice and profit report endpoints. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, and sellings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
   },
   "item": [
     {
@@ -386,9 +386,10 @@
           "response": []
         },
         {
-          "name": "Delete Customer",
+          "name": "Delete Customer (Check Confirmation)",
           "request": {
             "method": "DELETE",
+            "description": "Deletes a customer when there are no related credit invoices. If the customer has outstanding credit invoices, the API returns 400 with outstandingInvoiceCount, outstandingAmount, and outstandingInvoices. If all related credit invoices are fully paid and no restore flag is supplied, the API returns 409 with requiresConfirmation and confirmationField=restoreCreditInvoices.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/customers/{{customerId}}",
@@ -399,6 +400,70 @@
                 "api",
                 "customers",
                 "{{customerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Customer (Without Inventory Restore)",
+          "request": {
+            "method": "DELETE",
+            "description": "Confirms customer deletion and deletes related fully paid credit invoices without restoring invoice items to product inventory. The backend also accepts restoreCreditSales or restoreInvoices as aliases for restoreCreditInvoices.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restoreCreditInvoices\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "customers",
+                "{{customerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Customer (With Inventory Restore)",
+          "request": {
+            "method": "DELETE",
+            "description": "Confirms customer deletion, deletes related fully paid credit invoices, restores invoice quantities to product inventoryCount, and reduces soldItemCount. The response includes creditInvoicesRestored, deletedCreditInvoiceCount, restoredProductCount, and restoredItemCount.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restoreCreditInvoices\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customers/{{customerId}}?restoreCreditInvoices={{restoreCreditInvoices}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "customers",
+                "{{customerId}}"
+              ],
+              "query": [
+                {
+                  "key": "restoreCreditInvoices",
+                  "value": "{{restoreCreditInvoices}}"
+                }
               ]
             }
           },
@@ -1399,6 +1464,10 @@
     {
       "key": "customerSearchPhone",
       "value": "01000000000"
+    },
+    {
+      "key": "restoreCreditInvoices",
+      "value": "true"
     },
     {
       "key": "productId",

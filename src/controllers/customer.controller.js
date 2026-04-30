@@ -1,5 +1,6 @@
 const CreditSale = require("../models/creditSale.model");
 const Customer = require("../models/customer.model");
+const Product = require("../models/product.model");
 const Selling = require("../models/selling.model");
 const {
   buildCreditSaleSummary,
@@ -9,6 +10,11 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const OPEN_CREDIT_SALE_STATUSES = ["pending", "partially_paid"];
 const MONEY_EPSILON = 1e-9;
+const CUSTOMER_DELETE_RESTORE_FLAGS = [
+  "restoreCreditInvoices",
+  "restoreCreditSales",
+  "restoreInvoices",
+];
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const getFirstDefined = (...values) => values.find((value) => value !== undefined);
@@ -220,6 +226,119 @@ const getLatestDate = (dates) => {
   }
 
   return latestDate;
+};
+
+const getCreditSaleItemProductId = (item) => {
+  if (
+    item.product &&
+    typeof item.product === "object" &&
+    item.product._id !== undefined
+  ) {
+    return item.product._id;
+  }
+
+  return item.product;
+};
+
+const buildQuantityByProductId = (creditSales) => {
+  const quantityByProductId = new Map();
+
+  for (const creditSale of creditSales) {
+    const items = Array.isArray(creditSale.items) ? creditSale.items : [];
+
+    for (const item of items) {
+      const productId = getCreditSaleItemProductId(item)?.toString();
+      if (!productId) continue;
+
+      quantityByProductId.set(
+        productId,
+        Number(quantityByProductId.get(productId) || 0) + Number(item.quantity || 0)
+      );
+    }
+  }
+
+  return quantityByProductId;
+};
+
+const applyInventoryRestoreForCreditSales = async (creditSales, res) => {
+  const quantityByProductId = buildQuantityByProductId(creditSales);
+  const productIds = [...quantityByProductId.keys()];
+
+  if (productIds.length === 0) {
+    return { restoredProductCount: 0, restoredItemCount: 0, rollback: async () => {} };
+  }
+
+  const products = await Product.find({ _id: { $in: productIds } });
+  const productsById = new Map(products.map((product) => [product._id.toString(), product]));
+  const originalStates = new Map();
+
+  for (const productId of productIds) {
+    const product = productsById.get(productId);
+
+    if (!product) {
+      res.status(404);
+      throw new Error("المنتج المرتبط بإحدى فواتير البيع الآجل غير موجود");
+    }
+
+    originalStates.set(productId, {
+      inventoryCount: Number(product.inventoryCount || 0),
+      soldItemCount: Number(product.soldItemCount || 0),
+    });
+  }
+
+  const rollback = async () => {
+    for (const [productId, originalState] of originalStates.entries()) {
+      const product = productsById.get(productId);
+      if (!product) continue;
+
+      product.inventoryCount = originalState.inventoryCount;
+      product.soldItemCount = originalState.soldItemCount;
+
+      try {
+        await product.save();
+      } catch (_rollbackError) {
+        // Best-effort rollback only; surface the original failure.
+      }
+    }
+  };
+
+  try {
+    for (const [productId, quantity] of quantityByProductId.entries()) {
+      const product = productsById.get(productId);
+      const originalState = originalStates.get(productId);
+
+      product.inventoryCount = originalState.inventoryCount + quantity;
+      product.soldItemCount = Math.max(0, originalState.soldItemCount - quantity);
+      await product.save();
+    }
+  } catch (error) {
+    await rollback();
+    throw error;
+  }
+
+  return {
+    restoredProductCount: productIds.length,
+    restoredItemCount: [...quantityByProductId.values()].reduce(
+      (sum, quantity) => sum + Number(quantity || 0),
+      0
+    ),
+    rollback,
+  };
+};
+
+const getCustomerDeleteRestoreDecision = (body = {}, query = {}, res) => {
+  const rawDecision = getFirstDefined(
+    ...CUSTOMER_DELETE_RESTORE_FLAGS.map((field) => body[field]),
+    ...CUSTOMER_DELETE_RESTORE_FLAGS.map((field) => query[field])
+  );
+  const parsedDecision = parseBoolean(rawDecision);
+
+  if (parsedDecision === null) {
+    res.status(400);
+    throw new Error("قيمة restoreCreditInvoices غير صالحة");
+  }
+
+  return parsedDecision;
 };
 
 const getCustomers = asyncHandler(async (req, res) => {
@@ -527,14 +646,92 @@ const deleteCustomer = asyncHandler(async (req, res) => {
     throw new Error("العميل غير موجود");
   }
 
-  const relatedCreditSale = await CreditSale.exists({ customer: customer._id });
-  if (relatedCreditSale) {
-    res.status(400);
-    throw new Error("لا يمكن حذف العميل لوجود معاملات بيع آجل مرتبطة به");
+  const outstandingCreditSales = await CreditSale.find({
+    customer: customer._id,
+    remainingAmount: { $gt: MONEY_EPSILON },
+  })
+    .select("_id remainingAmount status sellingDate totalPrice paidAmount")
+    .sort({ sellingDate: -1, createdAt: -1 })
+    .lean();
+
+  if (outstandingCreditSales.length > 0) {
+    return res.status(400).json({
+      message: "لا يمكن حذف العميل لوجود فواتير بيع آجل عليها مبالغ متبقية",
+      outstandingInvoiceCount: outstandingCreditSales.length,
+      outstandingAmount: roundMoney(
+        outstandingCreditSales.reduce(
+          (sum, creditSale) => sum + Number(creditSale.remainingAmount || 0),
+          0
+        )
+      ),
+      outstandingInvoices: outstandingCreditSales.map((creditSale) => ({
+        invoiceId: creditSale._id,
+        sellingDate: creditSale.sellingDate,
+        status: creditSale.status,
+        totalPrice: creditSale.totalPrice,
+        paidAmount: creditSale.paidAmount,
+        remainingAmount: creditSale.remainingAmount,
+      })),
+    });
   }
 
-  await customer.deleteOne();
-  res.json({ message: "Customer deleted successfully" });
+  const relatedCreditSales = await CreditSale.find({ customer: customer._id });
+  const restoreCreditInvoices = getCustomerDeleteRestoreDecision(
+    req.body,
+    req.query,
+    res
+  );
+
+  if (relatedCreditSales.length > 0 && restoreCreditInvoices === undefined) {
+    return res.status(409).json({
+      message:
+        "كل فواتير البيع الآجل لهذا العميل تم تحصيلها. أكد هل تريد استرجاع هذه الفواتير إلى المخزون قبل حذف العميل.",
+      requiresConfirmation: true,
+      canDeleteCustomer: true,
+      canRestoreCreditInvoices: true,
+      confirmationField: "restoreCreditInvoices",
+      creditInvoiceCount: relatedCreditSales.length,
+      creditInvoices: relatedCreditSales.map((creditSale) => ({
+        invoiceId: creditSale._id,
+        sellingDate: creditSale.sellingDate,
+        status: creditSale.status,
+        totalPrice: creditSale.totalPrice,
+        paidAmount: creditSale.paidAmount,
+        remainingAmount: creditSale.remainingAmount,
+      })),
+    });
+  }
+
+  if (!restoreCreditInvoices) {
+    await CreditSale.deleteMany({ customer: customer._id });
+    await customer.deleteOne();
+    return res.json({
+      message: "Customer deleted successfully",
+      creditInvoicesRestored: false,
+      deletedCreditInvoiceCount: relatedCreditSales.length,
+    });
+  }
+
+  const inventoryRestore = await applyInventoryRestoreForCreditSales(
+    relatedCreditSales,
+    res
+  );
+
+  try {
+    await CreditSale.deleteMany({ customer: customer._id });
+    await customer.deleteOne();
+  } catch (error) {
+    await inventoryRestore.rollback();
+    throw error;
+  }
+
+  res.json({
+    message: "Customer deleted successfully",
+    creditInvoicesRestored: true,
+    deletedCreditInvoiceCount: relatedCreditSales.length,
+    restoredProductCount: inventoryRestore.restoredProductCount,
+    restoredItemCount: inventoryRestore.restoredItemCount,
+  });
 });
 
 module.exports = {
