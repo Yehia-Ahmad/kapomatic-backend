@@ -13,6 +13,7 @@ Backend API for a warehouse system with:
 - `name` (required, unique)
 - `image` (required, base64 string in raw or data URI format)
 - `description` (required)
+- `specifications` (optional, array of objects)
 
 ### Product
 - `name` (required)
@@ -24,6 +25,7 @@ Backend API for a warehouse system with:
 - `purchasePrice` (optional, defaults to `wholesalePrice`)
 - `retailPrice` (required, must be >= wholesale price)
 - `soldItemCount` (optional, defaults to `0`)
+- `specifications` (optional, array of objects; defaults to a copied snapshot of the category specifications)
 
 ### Customer
 - `name` (required)
@@ -95,7 +97,17 @@ Sample category payload:
 {
   "name": "Electronics",
   "imageBase64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA",
-  "description": "Electronic devices and accessories"
+  "description": "Electronic devices and accessories",
+  "specifications": [
+    {
+      "name": "Color",
+      "value": "Black"
+    },
+    {
+      "name": "Size",
+      "value": "Medium"
+    }
+  ]
 }
 ```
 
@@ -122,7 +134,17 @@ Sample product payload:
   "wholesalePrice": 8.5,
   "purchasePrice": 7.25,
   "retailPrice": 15,
-  "soldItemCount": 10
+  "soldItemCount": 10,
+  "specifications": [
+    {
+      "name": "Color",
+      "value": "Black"
+    },
+    {
+      "name": "Size",
+      "value": "Medium"
+    }
+  ]
 }
 ```
 

@@ -19,6 +19,14 @@ const categorySchema = new mongoose.Schema(
           "يجب أن تكون صورة الفئة سلسلة base64 صالحة (خام أو بصيغة data URI)",
       },
     },
+    specifications: {
+      type: [
+        {
+          type: mongoose.Schema.Types.Mixed,
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

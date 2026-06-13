@@ -9,6 +9,8 @@ const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const CATEGORY_PRODUCT_FIELDS = "name image specifications";
+
 const isTruthyFlag = (value) => {
   if (typeof value === "string") {
     const normalizedValue = value.trim().toLowerCase();
@@ -59,6 +61,31 @@ const parseOptionalBodyDate = (value, fieldLabel, res, endOfDay = false) => {
 
   return parseOptionalDate(String(value), fieldLabel, res, endOfDay);
 };
+
+const getSpecificationsFromBody = (body) =>
+  body.specifications !== undefined ? body.specifications : body.Specifications;
+
+const validateSpecifications = (specifications, res) => {
+  if (specifications === undefined) return undefined;
+
+  if (
+    !Array.isArray(specifications) ||
+    specifications.some(
+      (specification) =>
+        !specification ||
+        typeof specification !== "object" ||
+        Array.isArray(specification)
+    )
+  ) {
+    res.status(400);
+    throw new Error("يجب أن تكون المواصفات مصفوفة من الكائنات");
+  }
+
+  return specifications;
+};
+
+const cloneSpecifications = (specifications = []) =>
+  specifications.map((specification) => JSON.parse(JSON.stringify(specification)));
 
 const normalizeYear = (value, res) => {
   if (value === undefined) {
@@ -331,7 +358,7 @@ const getProducts = asyncHandler(async (req, res) => {
   }
 
   const products = await Product.find({ category: categoryId })
-    .populate("category", "name image")
+    .populate("category", CATEGORY_PRODUCT_FIELDS)
     .sort({ createdAt: -1 });
 
   res.json(products);
@@ -363,14 +390,17 @@ const searchProducts = asyncHandler(async (req, res) => {
   }
 
   const products = await Product.find({ $or: searchFilters })
-    .populate("category", "name image")
+    .populate("category", CATEGORY_PRODUCT_FIELDS)
     .sort({ createdAt: -1 });
 
   res.json(products);
 });
 
 const getProductById = asyncHandler(async (req, res) => {
-  const product = await Product.findById(req.params.id).populate("category", "name image");
+  const product = await Product.findById(req.params.id).populate(
+    "category",
+    CATEGORY_PRODUCT_FIELDS
+  );
 
   if (!product) {
     res.status(404);
@@ -483,6 +513,7 @@ const createProduct = asyncHandler(async (req, res) => {
   }
 
   const normalizedImage = imageBase64 !== undefined ? imageBase64 : image;
+  const requestSpecifications = validateSpecifications(getSpecificationsFromBody(req.body), res);
 
   let normalizedInventoryCount = inventoryCount;
   let normalizedSoldItemCount = soldItemCount;
@@ -517,6 +548,9 @@ const createProduct = asyncHandler(async (req, res) => {
     wholesalePrice,
     purchasePrice: normalizedPurchasePrice,
     retailPrice,
+    specifications: cloneSpecifications(
+      requestSpecifications !== undefined ? requestSpecifications : category.specifications
+    ),
   };
 
   if (normalizedImage !== undefined) {
@@ -528,13 +562,14 @@ const createProduct = asyncHandler(async (req, res) => {
   }
 
   const product = await Product.create(payload);
-  await product.populate("category", "name image");
+  await product.populate("category", CATEGORY_PRODUCT_FIELDS);
 
   res.status(201).json(product);
 });
 
 const updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
+  let selectedCategory;
 
   if (!product) {
     res.status(404);
@@ -542,13 +577,14 @@ const updateProduct = asyncHandler(async (req, res) => {
   }
 
   if (req.body.categoryId !== undefined) {
-    const category = await Category.findById(req.body.categoryId);
-    if (!category) {
+    selectedCategory = await Category.findById(req.body.categoryId);
+    if (!selectedCategory) {
       res.status(404);
       throw new Error("لم يتم العثور على فئة للمعرّف المقدم");
     }
     product.category = req.body.categoryId;
   }
+  const requestSpecifications = validateSpecifications(getSpecificationsFromBody(req.body), res);
 
   const nextWholesale =
     req.body.wholesalePrice !== undefined ? req.body.wholesalePrice : product.wholesalePrice;
@@ -671,9 +707,14 @@ const updateProduct = asyncHandler(async (req, res) => {
   if (req.body.wholesalePrice !== undefined) product.wholesalePrice = req.body.wholesalePrice;
   if (req.body.purchasePrice !== undefined) product.purchasePrice = req.body.purchasePrice;
   if (req.body.retailPrice !== undefined) product.retailPrice = req.body.retailPrice;
+  if (requestSpecifications !== undefined) {
+    product.specifications = cloneSpecifications(requestSpecifications);
+  } else if (selectedCategory) {
+    product.specifications = cloneSpecifications(selectedCategory.specifications);
+  }
 
   const updatedProduct = await product.save();
-  await updatedProduct.populate("category", "name image");
+  await updatedProduct.populate("category", CATEGORY_PRODUCT_FIELDS);
 
   res.json(updatedProduct);
 });

@@ -89,7 +89,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Electronics\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Electronics\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"specifications\": [\n    {\n      \"name\": \"Color\",\n      \"value\": \"Black\"\n    },\n    {\n      \"name\": \"Size\",\n      \"value\": \"Medium\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/categories",
@@ -116,7 +116,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Electronics\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Updated Electronics\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"specifications\": [\n    {\n      \"name\": \"Color\",\n      \"value\": \"Black\"\n    },\n    {\n      \"name\": \"Warranty\",\n      \"value\": \"1 year\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/categories/{{categoryId}}",
@@ -145,6 +145,242 @@
               "path": [
                 "api",
                 "categories",
+                "{{categoryId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "E-commerce Settings",
+      "item": [
+        {
+          "name": "Get All E-commerce Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Storefront Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/storefront",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "storefront"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Categories With Products And Settings",
+          "request": {
+            "method": "GET",
+            "description": "Returns each category with products, setting, and category.filters built from category specifications. Each filter includes values containing the unique product specification values for that category. The same computed filters are also exposed as category.specifications for compatibility.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "categories"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Categories With Products And Settings",
+          "request": {
+            "method": "GET",
+            "description": "Returns the same response shape as Get Categories With Products And Settings, filtered to categories whose e-commerce setting has showOnWebsite true.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/categories/active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "categories",
+                "active"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category Filters",
+          "request": {
+            "method": "GET",
+            "description": "Returns only an array of category specification filters. Each object has title, isVisible, and values. values are unique specification values from all products in this category, and isVisible reflects the saved e-commerce setting filter visibility when available.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/categories/{{categoryId}}/filters",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "categories",
+                "{{categoryId}}",
+                "filters"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Products By Active Category",
+          "request": {
+            "method": "GET",
+            "description": "Returns only displayed products selected in selectedProducts for a category when that category has an e-commerce setting with showOnWebsite true. Add one or more specification/value query pairs to search displayed products by matching product specification values, for example specification=Color&value=Black&specification=Size&value=Medium.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/categories/active/{{categoryId}}/products?specification=Color&value=Black&specification=Size&value=Medium",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "categories",
+                "active",
+                "{{categoryId}}",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "specification",
+                  "value": "Color"
+                },
+                {
+                  "key": "value",
+                  "value": "Black"
+                },
+                {
+                  "key": "specification",
+                  "value": "Size"
+                },
+                {
+                  "key": "value",
+                  "value": "Medium"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product By Active Category",
+          "request": {
+            "method": "GET",
+            "description": "Returns a single product only when the category has an e-commerce setting with showOnWebsite true, the product belongs to that category, and the product is selected in selectedProducts.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/categories/active/{{categoryId}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "categories",
+                "active",
+                "{{categoryId}}",
+                "products",
+                "{{productId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get E-commerce Setting By Category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "{{categoryId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upsert E-commerce Setting",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"showOnWebsite\": true,\n  \"productIds\": [\n    \"{{productId}}\"\n  ],\n  \"filters\": [\n    {\n      \"title\": \"Featured\",\n      \"products\": [\n        \"{{productId}}\"\n      ],\n      \"isVisible\": true\n    },\n    {\n      \"title\": \"Best sellers\",\n      \"products\": [],\n      \"isVisible\": true\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "{{categoryId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset E-commerce Setting",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
                 "{{categoryId}}"
               ]
             }
@@ -743,7 +979,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"code\": \"WM-001\",\n  \"inventoryCount\": 100,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"purchasePrice\": 7.25,\n  \"retailPrice\": 15,\n  \"soldItemCount\": 10,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"code\": \"WM-001\",\n  \"inventoryCount\": 100,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"purchasePrice\": 7.25,\n  \"retailPrice\": 15,\n  \"soldItemCount\": 10,\n  \"specifications\": [\n    {\n      \"name\": \"Color\",\n      \"value\": \"Black\"\n    },\n    {\n      \"name\": \"Size\",\n      \"value\": \"Medium\"\n    }\n  ],\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products",
@@ -771,7 +1007,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"editProduct\": true,\n  \"inventoryCount\": {{productInventoryCount}},\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"purchasePrice\": 7.5,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"editProduct\": true,\n  \"inventoryCount\": {{productInventoryCount}},\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"purchasePrice\": 7.5,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"specifications\": [\n    {\n      \"name\": \"Color\",\n      \"value\": \"Black\"\n    },\n    {\n      \"name\": \"Warranty\",\n      \"value\": \"1 year\"\n    }\n  ],\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products/{{productId}}",

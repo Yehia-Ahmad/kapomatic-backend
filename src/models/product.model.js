@@ -79,6 +79,14 @@ const productSchema = new mongoose.Schema(
       default: 0,
       min: [0, "عدد العناصر المباعة لا يمكن أن يكون سالبًا"],
     },
+    specifications: {
+      type: [
+        {
+          type: mongoose.Schema.Types.Mixed,
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );
