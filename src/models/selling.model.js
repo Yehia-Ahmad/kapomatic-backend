@@ -75,6 +75,16 @@ const sellingSchema = new mongoose.Schema(
       trim: true,
       maxlength: [30, "يجب ألا يزيد رقم هاتف العميل عن 30 حرف"],
     },
+    shippingLocation: {
+      type: String,
+      trim: true,
+      maxlength: [500, "يجب ألا يزيد عنوان الشحن عن 500 حرف"],
+    },
+    government: {
+      type: String,
+      trim: true,
+      maxlength: [120, "يجب ألا يزيد اسم المحافظة عن 120 حرف"],
+    },
     sellingDate: {
       type: Date,
       required: [true, "تاريخ البيع مطلوب"],

@@ -1,7 +1,9 @@
 const mongoose = require("mongoose");
 const Category = require("../models/category.model");
 const EcommerceSetting = require("../models/ecommerceSetting.model");
+const GeneralSetting = require("../models/generalSetting.model");
 const Product = require("../models/product.model");
+const ShippingSetting = require("../models/shippingSetting.model");
 const asyncHandler = require("../utils/asyncHandler");
 
 const ECOMMERCE_PRODUCT_FIELDS =
@@ -165,6 +167,152 @@ const parseBoolean = (value, defaultValue = false) => {
 
   return value === true || value === 1;
 };
+
+const parseNonNegativeNumber = (value, fieldLabel, res) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    res.status(400);
+    throw new Error(`${fieldLabel} يجب أن يكون رقمًا غير سالب`);
+  }
+
+  return Number(parsed.toFixed(2));
+};
+
+const normalizeCurrency = (value, res) => {
+  if (typeof value !== "string") {
+    res.status(400);
+    throw new Error("رمز العملة مطلوب");
+  }
+
+  const currency = value.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    res.status(400);
+    throw new Error("يجب أن تكون العملة رمز ISO 4217 مكونًا من 3 أحرف مثل EGP");
+  }
+
+  return currency;
+};
+
+const normalizeRequiredText = (value, fieldLabel, res) => {
+  if (typeof value !== "string" || !value.trim()) {
+    res.status(400);
+    throw new Error(`${fieldLabel} مطلوب`);
+  }
+
+  return value.trim();
+};
+
+const normalizeStoreLocations = (value, res) => {
+  if (!Array.isArray(value)) {
+    res.status(400);
+    throw new Error("يجب أن تكون storeLocations قائمة");
+  }
+
+  return value.map((location, index) => {
+    if (!location || typeof location !== "object" || Array.isArray(location)) {
+      res.status(400);
+      throw new Error(`بيانات موقع المتجر رقم ${index + 1} غير صالحة`);
+    }
+
+    return {
+      name: normalizeRequiredText(
+        location.name ?? location.storeName,
+        `اسم المتجر رقم ${index + 1}`,
+        res
+      ),
+      detailedLocation: normalizeRequiredText(
+        location.detailedLocation ?? location.location ?? location.address,
+        `العنوان التفصيلي للمتجر رقم ${index + 1}`,
+        res
+      ),
+      mapLink: normalizeRequiredText(
+        location.mapLink ?? location.mapUrl,
+        `رابط الخريطة للمتجر رقم ${index + 1}`,
+        res
+      ),
+    };
+  });
+};
+
+const normalizeSocialMediaLinks = (value, res) => {
+  if (!Array.isArray(value)) {
+    res.status(400);
+    throw new Error("يجب أن تكون socialMediaLinks قائمة");
+  }
+
+  return value.map((socialMedia, index) => {
+    if (!socialMedia || typeof socialMedia !== "object" || Array.isArray(socialMedia)) {
+      res.status(400);
+      throw new Error(`بيانات رابط التواصل الاجتماعي رقم ${index + 1} غير صالحة`);
+    }
+
+    return {
+      name: normalizeRequiredText(
+        socialMedia.name ?? socialMedia.platform,
+        `اسم منصة التواصل الاجتماعي رقم ${index + 1}`,
+        res
+      ),
+      link: normalizeRequiredText(
+        socialMedia.link ?? socialMedia.url,
+        `رابط منصة التواصل الاجتماعي رقم ${index + 1}`,
+        res
+      ),
+    };
+  });
+};
+
+const normalizeGovernmentShippingFees = (value, res) => {
+  if (value === undefined) {
+    res.status(400);
+    throw new Error("قائمة مصاريف الشحن حسب المحافظة مطلوبة");
+  }
+
+  if (!Array.isArray(value)) {
+    res.status(400);
+    throw new Error("يجب أن تكون قيمة governmentFees قائمة");
+  }
+
+  const seenGovernments = new Set();
+
+  return value.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      res.status(400);
+      throw new Error(`بيانات الشحن رقم ${index + 1} غير صالحة`);
+    }
+
+    const government = String(item.government ?? item.governorate ?? "").trim();
+    if (!government) {
+      res.status(400);
+      throw new Error(`اسم المحافظة مطلوب في بيانات الشحن رقم ${index + 1}`);
+    }
+
+    const normalizedGovernment = government.toLowerCase();
+    if (seenGovernments.has(normalizedGovernment)) {
+      res.status(400);
+      throw new Error(`تم تكرار المحافظة ${government}`);
+    }
+    seenGovernments.add(normalizedGovernment);
+
+    return {
+      government,
+      shippingFees: parseNonNegativeNumber(
+        item.shippingFees ?? item.shippingFee ?? item.fees ?? item.fee,
+        `قيمة الشحن للمحافظة ${government}`,
+        res
+      ),
+    };
+  });
+};
+
+const upsertShippingSetting = (update) =>
+  ShippingSetting.findOneAndUpdate(
+    { key: "default" },
+    {
+      $set: update,
+      $setOnInsert: { key: "default" },
+    },
+    { new: true, runValidators: true, upsert: true, setDefaultsOnInsert: true }
+  );
 
 const ensureObjectId = (value, fieldLabel, res) => {
   if (typeof value !== "string" || !mongoose.Types.ObjectId.isValid(value)) {
@@ -435,6 +583,203 @@ const getStorefrontSettings = asyncHandler(async (req, res) => {
   res.json(visibleSettings);
 });
 
+const formatHomePageCategories = (setting) => {
+  const categories = setting?.homePageCategoryIds || [];
+
+  return {
+    categoryIds: categories.map((category) => category._id || category),
+    categories,
+  };
+};
+
+const getHomePageCategories = asyncHandler(async (req, res) => {
+  const setting = await GeneralSetting.findOne({ key: "default" })
+    .select("homePageCategoryIds")
+    .populate("homePageCategoryIds", "name image specifications")
+    .lean();
+
+  res.json(formatHomePageCategories(setting));
+});
+
+const updateHomePageCategories = asyncHandler(async (req, res) => {
+  const categoryInput = req.body.categoryIds ?? req.body.homePageCategoryIds;
+  if (categoryInput === undefined) {
+    res.status(400);
+    throw new Error("قائمة فئات الصفحة الرئيسية مطلوبة");
+  }
+
+  const categoryIds = normalizeObjectIdList(
+    categoryInput,
+    "categoryIds",
+    res
+  );
+  const categoryCount =
+    categoryIds.length > 0
+      ? await Category.countDocuments({ _id: { $in: categoryIds } })
+      : 0;
+
+  if (categoryCount !== categoryIds.length) {
+    res.status(400);
+    throw new Error("واحدة أو أكثر من فئات الصفحة الرئيسية غير موجودة");
+  }
+
+  const setting = await GeneralSetting.findOneAndUpdate(
+    { key: "default" },
+    {
+      $set: { homePageCategoryIds: categoryIds },
+      $setOnInsert: { key: "default" },
+    },
+    { new: true, runValidators: true, upsert: true, setDefaultsOnInsert: true }
+  ).populate("homePageCategoryIds", "name image specifications");
+
+  res.json(formatHomePageCategories(setting));
+});
+
+const formatGeneralSettings = (generalSetting, websiteSetting) => {
+  const general = generalSetting?.toObject
+    ? generalSetting.toObject()
+    : generalSetting || {
+        mainLogo: null,
+        mainColor: "#000000",
+        storeLocations: [],
+        socialMediaLinks: [],
+        homePageCategoryIds: [],
+      };
+
+  return {
+    ...general,
+    currencyCode: websiteSetting?.currency || "EGP",
+    freeShippingMinimumAmount: websiteSetting?.freeShippingMinimumAmount || 0,
+  };
+};
+
+const getGeneralSettings = asyncHandler(async (req, res) => {
+  const [generalSetting, websiteSetting] = await Promise.all([
+    GeneralSetting.findOne({ key: "default" }).lean(),
+    ShippingSetting.findOne({ key: "default" })
+      .select("currency freeShippingMinimumAmount")
+      .lean(),
+  ]);
+
+  res.json(formatGeneralSettings(generalSetting, websiteSetting));
+});
+
+const updateGeneralSettings = asyncHandler(async (req, res) => {
+  const generalUpdate = {};
+  const websiteUpdate = {};
+  const mainLogo =
+    req.body.mainLogo !== undefined
+      ? req.body.mainLogo
+      : req.body.logo !== undefined
+        ? req.body.logo
+        : req.body.logoImage;
+
+  if (
+    req.body.mainLogo !== undefined ||
+    req.body.logo !== undefined ||
+    req.body.logoImage !== undefined
+  ) {
+    if (mainLogo !== null && typeof mainLogo !== "string") {
+      res.status(400);
+      throw new Error("الشعار الرئيسي غير صالح");
+    }
+    generalUpdate.mainLogo = mainLogo;
+  }
+
+  if (req.body.mainColor !== undefined) {
+    if (typeof req.body.mainColor !== "string") {
+      res.status(400);
+      throw new Error("اللون الرئيسي غير صالح");
+    }
+    generalUpdate.mainColor = req.body.mainColor.trim().toUpperCase();
+  }
+
+  if (req.body.storeLocations !== undefined) {
+    generalUpdate.storeLocations = normalizeStoreLocations(req.body.storeLocations, res);
+  }
+
+  if (req.body.socialMediaLinks !== undefined) {
+    generalUpdate.socialMediaLinks = normalizeSocialMediaLinks(req.body.socialMediaLinks, res);
+  }
+
+  if (req.body.currencyCode !== undefined || req.body.currency !== undefined) {
+    websiteUpdate.currency = normalizeCurrency(
+      req.body.currencyCode ?? req.body.currency,
+      res
+    );
+  }
+
+  if (req.body.freeShippingMinimumAmount !== undefined) {
+    websiteUpdate.freeShippingMinimumAmount = parseNonNegativeNumber(
+      req.body.freeShippingMinimumAmount,
+      "الحد الأدنى للشحن المجاني",
+      res
+    );
+  }
+
+  const generalSetting = await GeneralSetting.findOneAndUpdate(
+    { key: "default" },
+    {
+      $set: generalUpdate,
+      $setOnInsert: { key: "default" },
+    },
+    { new: true, runValidators: true, upsert: true, setDefaultsOnInsert: true }
+  );
+  const websiteSetting =
+    Object.keys(websiteUpdate).length > 0
+      ? await upsertShippingSetting(websiteUpdate)
+      : await ShippingSetting.findOne({ key: "default" });
+
+  res.json(formatGeneralSettings(generalSetting, websiteSetting));
+});
+
+const getGovernmentShippingFees = asyncHandler(async (req, res) => {
+  const setting = await ShippingSetting.findOne({ key: "default" })
+    .select("governmentFees freeShippingMinimumAmount")
+    .lean();
+
+  res.json({
+    governmentFees: setting?.governmentFees || [],
+    freeShippingMinimumAmount: setting?.freeShippingMinimumAmount || 0,
+  });
+});
+
+const updateGovernmentShippingFees = asyncHandler(async (req, res) => {
+  const governmentFees = normalizeGovernmentShippingFees(
+    req.body.governmentFees ?? req.body.governments ?? req.body.shippingFees,
+    res
+  );
+
+  const setting = await upsertShippingSetting({ governmentFees });
+  res.json(setting);
+});
+
+const updateFreeShippingMinimumAmount = asyncHandler(async (req, res) => {
+  const amount = parseNonNegativeNumber(
+    req.body.freeShippingMinimumAmount ?? req.body.minimumAmount ?? req.body.amount,
+    "الحد الأدنى للشحن المجاني",
+    res
+  );
+
+  const setting = await upsertShippingSetting({
+    freeShippingMinimumAmount: amount,
+  });
+  res.json(setting);
+});
+
+const getWebsiteCurrency = asyncHandler(async (req, res) => {
+  const setting = await ShippingSetting.findOne({ key: "default" }).select("currency").lean();
+
+  res.json({ currency: setting?.currency || "EGP" });
+});
+
+const updateWebsiteCurrency = asyncHandler(async (req, res) => {
+  const currency = normalizeCurrency(req.body.currency ?? req.body.currencyCode, res);
+  const setting = await upsertShippingSetting({ currency });
+
+  res.json({ currency: setting.currency });
+});
+
 const getEcommerceSettingByCategory = asyncHandler(async (req, res) => {
   const categoryId = ensureObjectId(req.params.categoryId, "معرّف الفئة", res);
   const setting = await populateSetting(EcommerceSetting.findOne({ category: categoryId }));
@@ -500,6 +845,15 @@ module.exports = {
   getProductByActiveEcommerceCategory,
   getEcommerceSettings,
   getStorefrontSettings,
+  getHomePageCategories,
+  updateHomePageCategories,
+  getGeneralSettings,
+  updateGeneralSettings,
+  getGovernmentShippingFees,
+  getWebsiteCurrency,
+  updateWebsiteCurrency,
+  updateGovernmentShippingFees,
+  updateFreeShippingMinimumAmount,
   getEcommerceSettingByCategory,
   upsertEcommerceSetting,
   resetEcommerceSetting,

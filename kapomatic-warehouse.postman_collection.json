@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, and sellings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Cart checkout creates selling invoices from customer, shipping location, and products payloads. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
   },
   "item": [
     {
@@ -188,6 +188,299 @@
                 "api",
                 "ecommerce-settings",
                 "storefront"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Home Page Categories",
+          "request": {
+            "method": "GET",
+            "description": "Returns the ordered category IDs and populated categories selected for the website home page.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/home-page/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ecommerce-settings", "home-page", "categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set Home Page Categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Home page categories are stored\", function () {",
+                  "  pm.expect(data.categoryIds).to.be.an(\"array\");",
+                  "  pm.expect(data.categories).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "description": "Replaces the ordered home page category selection. Send an empty categoryIds array to clear it.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryIds\": [\n    \"{{categoryId}}\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/home-page/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ecommerce-settings", "home-page", "categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get General Settings",
+          "request": {
+            "method": "GET",
+            "description": "Returns the main logo, main color, currency code, free-shipping minimum amount, store locations, and social media links.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/general",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "general"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set Or Update General Settings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"General settings are stored\", function () {",
+                  "  pm.expect(data).to.have.property(\"mainLogo\");",
+                  "  pm.expect(data.mainColor).to.eql(\"#1A73E8\");",
+                  "  pm.expect(data.currencyCode).to.eql(\"EGP\");",
+                  "  pm.expect(data.freeShippingMinimumAmount).to.eql(1000);",
+                  "  pm.expect(data.storeLocations).to.be.an(\"array\");",
+                  "  pm.expect(data.socialMediaLinks).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "description": "Partially updates the global general settings. Omitted fields are preserved; submitted arrays replace their stored arrays.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mainLogo\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==\",\n  \"mainColor\": \"#1A73E8\",\n  \"currencyCode\": \"EGP\",\n  \"freeShippingMinimumAmount\": 1000,\n  \"storeLocations\": [\n    {\n      \"name\": \"Nasr City Store\",\n      \"detailedLocation\": \"10 Example Street, Nasr City, Cairo\",\n      \"mapLink\": \"https://maps.google.com/?q=30.05,31.33\"\n    }\n  ],\n  \"socialMediaLinks\": [\n    {\n      \"name\": \"Facebook\",\n      \"link\": \"https://www.facebook.com/example\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/general",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "general"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Website Currency",
+          "request": {
+            "method": "GET",
+            "description": "Returns the website currency. Defaults to EGP until a currency is explicitly saved.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/currency",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "currency"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set Or Update Website Currency",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Website currency is stored\", function () {",
+                  "  pm.expect(data.currency).to.eql(\"EGP\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "description": "Creates or updates the global website currency using a three-letter ISO 4217 code.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currency\": \"EGP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/currency",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "currency"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Government Shipping Fees",
+          "request": {
+            "method": "GET",
+            "description": "Returns the government options and fees used by the checkout form, together with the free-shipping minimum amount.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/shipping/governments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "shipping",
+                "governments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Government Shipping Fees",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Shipping setting stores government fees\", function () {",
+                  "  pm.expect(data).to.have.property(\"governmentFees\");",
+                  "  pm.expect(data.governmentFees).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "description": "Stores shipping fees for each government/governorate. Replaces the full governmentFees list.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"governmentFees\": [\n    {\n      \"government\": \"Cairo\",\n      \"shippingFees\": {{cairoShippingFees}}\n    },\n    {\n      \"government\": \"Giza\",\n      \"shippingFees\": {{gizaShippingFees}}\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/shipping/governments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "shipping",
+                "governments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Free Shipping Minimum",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Shipping setting stores free shipping minimum\", function () {",
+                  "  pm.expect(data).to.have.property(\"freeShippingMinimumAmount\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "description": "Stores the minimum cart amount required for free shipping.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"freeShippingMinimumAmount\": {{freeShippingMinimumAmount}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/shipping/free-minimum",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "shipping",
+                "free-minimum"
               ]
             }
           },
@@ -1670,12 +1963,234 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Website Images",
+      "item": [
+        {
+          "name": "Create Website Image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Website image is created\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(data).to.have.property(\"_id\");",
+                  "  pm.expect(data.targetType).to.eql(\"price\");",
+                  "});",
+                  "if (data && data._id) pm.collectionVariables.set(\"websiteImageId\", data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Creates a website image target. This example resolves products priced at or below maxPrice inside the selected category.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Summer offer\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==\",\n  \"targetType\": \"price\",\n  \"categoryIds\": [\"{{categoryId}}\"],\n  \"maxPrice\": 500,\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Website Images",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Website Images",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images/active",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images", "active"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Website Images With Products",
+          "request": {
+            "method": "GET",
+            "description": "Returns active image targets with imageUrl and a resolvedProducts array. The large embedded imageBase64 value is omitted from this combined response.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images/active-with-products",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images", "active-with-products"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Website Image By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images", "{{websiteImageId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Website Image Asset",
+          "request": {
+            "method": "GET",
+            "description": "Returns the stored website image as a binary image response. This URL is exposed as imageUrl by active-with-products.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}/image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images", "{{websiteImageId}}", "image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Website Image Resolved Products",
+          "request": {
+            "method": "GET",
+            "description": "Returns the deduplicated final product array resolved from the image targeting rules.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images", "{{websiteImageId}}", "products"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Website Image",
+          "request": {
+            "method": "PUT",
+            "description": "Partially updates the image. Changing targetType requires the fields required by the new target type.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated summer offer\",\n  \"targetType\": \"both\",\n  \"categoryIds\": [\"{{categoryId}}\"],\n  \"productIds\": [\"{{productId}}\"],\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images", "{{websiteImageId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Website Image",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images", "{{websiteImageId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        {
+          "name": "Checkout Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Checkout creates a selling invoice\", function () {",
+                  "  pm.expect(data).to.have.property(\"_id\");",
+                  "  pm.expect(data).to.have.property(\"invoiceId\");",
+                  "  pm.expect(data).to.have.property(\"items\");",
+                  "  pm.expect(data).to.have.property(\"government\");",
+                  "  pm.expect(data).to.have.property(\"shippingLocation\");",
+                  "  pm.expect(data).to.have.property(\"shippingFees\");",
+                  "});",
+                  "if (data && (data._id || data.invoiceId)) {",
+                  "  pm.collectionVariables.set(\"sellingId\", data._id || data.invoiceId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Creates a selling invoice from the storefront checkout form. Required fields: customerName, customerPhone, government, shippingLocation, and products. The government must exist in Government Shipping Fees; the backend calculates shippingFees and applies the configured free-shipping threshold. Each product requires productId and price; quantity is optional and defaults to 1.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"government\": \"Cairo\",\n  \"shippingLocation\": \"Cairo, Nasr City\",\n  \"products\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"price\": 15,\n      \"quantity\": 2\n    },\n    {\n      \"productId\": \"{{productId}}\",\n      \"price\": 30\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "checkout"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:5000"
+    },
+    {
+      "key": "websiteImageId",
+      "value": ""
     },
     {
       "key": "categoryId",
@@ -1772,6 +2287,22 @@
     {
       "key": "customerPhone",
       "value": "+201234567890"
+    },
+    {
+      "key": "shippingLocation",
+      "value": "Cairo, Nasr City"
+    },
+    {
+      "key": "cairoShippingFees",
+      "value": "50"
+    },
+    {
+      "key": "gizaShippingFees",
+      "value": "60"
+    },
+    {
+      "key": "freeShippingMinimumAmount",
+      "value": "1000"
     }
   ]
 }

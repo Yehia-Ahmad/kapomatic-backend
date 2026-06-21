@@ -7,6 +7,15 @@ const {
   getProductByActiveEcommerceCategory,
   getProductsByActiveEcommerceCategory,
   getStorefrontSettings,
+  getHomePageCategories,
+  updateHomePageCategories,
+  getGeneralSettings,
+  updateGeneralSettings,
+  getGovernmentShippingFees,
+  getWebsiteCurrency,
+  updateWebsiteCurrency,
+  updateFreeShippingMinimumAmount,
+  updateGovernmentShippingFees,
   getEcommerceSettingByCategory,
   upsertEcommerceSetting,
   resetEcommerceSetting,
@@ -24,6 +33,17 @@ router.get(
   getProductByActiveEcommerceCategory
 );
 router.get("/storefront", getStorefrontSettings);
+router
+  .route("/home-page/categories")
+  .get(getHomePageCategories)
+  .put(updateHomePageCategories);
+router.route("/general").get(getGeneralSettings).put(updateGeneralSettings);
+router.route("/currency").get(getWebsiteCurrency).put(updateWebsiteCurrency);
+router
+  .route("/shipping/governments")
+  .get(getGovernmentShippingFees)
+  .put(updateGovernmentShippingFees);
+router.put("/shipping/free-minimum", updateFreeShippingMinimumAmount);
 router
   .route("/:categoryId")
   .get(getEcommerceSettingByCategory)

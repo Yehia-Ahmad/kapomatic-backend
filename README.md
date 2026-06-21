@@ -6,6 +6,9 @@ Backend API for a warehouse system with:
 - `customers`
 - `products` (each product belongs to one category)
 - `sellings` (selling history with inventory deduction)
+- `cart` (checkout endpoint that creates a selling invoice)
+- `shipping settings` (government shipping fees and free-shipping threshold)
+- `website image targeting` (category, product, combined, and price-based image placement)
 
 ## Data Model
 
@@ -35,6 +38,8 @@ Backend API for a warehouse system with:
 - `productId` (required, must exist in products)
 - `customerName` (required)
 - `customerPhone` (required)
+- `shippingLocation` (optional for selling invoices, required for cart checkout)
+- `government` (required for cart checkout and selected from the configured government shipping fees)
 - `sellingDate` (required)
 - `quantity` (required, positive integer, can also be sent as `quentity`)
 - `price` (required, non-negative number, price per each sold item)
@@ -60,6 +65,20 @@ Backend API for a warehouse system with:
 - `status` (`pending`, `partially_paid`, `paid`, `Reactionary`)
 - `payments` (array of recorded payments)
 - `notes` (optional)
+
+### Shipping Setting
+- `governmentFees` (array of `{ government, shippingFees }`)
+- `freeShippingMinimumAmount` (non-negative number, defaults to `0`)
+
+### General Setting
+
+- `mainLogo` (base64 image or data URI)
+- `mainColor` (six-digit hex color, for example `#1A73E8`)
+- `currencyCode` (three-letter ISO 4217 currency code, defaults to `EGP`)
+- `freeShippingMinimumAmount` (non-negative number, defaults to `0`)
+- `storeLocations` (array of `{ name, detailedLocation, mapLink }`)
+- `socialMediaLinks` (array of `{ name, link }`)
+- `homePageCategoryIds` (ordered list of categories displayed on the website home page)
 
 ## Setup
 
@@ -170,6 +189,86 @@ Profit is calculated from each product invoice item using the stored `purchasePr
 
 If `dateFrom` and `dateTo` are omitted, all invoices for that product are updated across the system.
 
+### E-commerce Website Settings
+
+- `GET /api/ecommerce-settings/general`
+- `PUT /api/ecommerce-settings/general`
+- `GET /api/ecommerce-settings/home-page/categories`
+- `PUT /api/ecommerce-settings/home-page/categories`
+- `GET /api/ecommerce-settings/currency`
+- `PUT /api/ecommerce-settings/currency`
+- `GET /api/ecommerce-settings/shipping/governments`
+- `PUT /api/ecommerce-settings/shipping/governments`
+- `PUT /api/ecommerce-settings/shipping/free-minimum`
+
+Set or update the website currency using its three-letter ISO 4217 code:
+
+```json
+{
+  "currency": "EGP"
+}
+```
+
+General settings updates are partial. Omitted fields keep their stored values; submitted arrays replace their stored arrays.
+
+Set the ordered categories displayed on the website home page:
+
+```json
+{
+  "categoryIds": [
+    "66b0b7b5a8c197aa0adf1234",
+    "66b0b7b5a8c197aa0adf5678"
+  ]
+}
+```
+
+The response contains both `categoryIds` and populated `categories`. Send an empty array to clear the home page selection.
+
+```json
+{
+  "mainLogo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
+  "mainColor": "#1A73E8",
+  "currencyCode": "EGP",
+  "freeShippingMinimumAmount": 1000,
+  "storeLocations": [
+    {
+      "name": "Nasr City Store",
+      "detailedLocation": "10 Example Street, Nasr City, Cairo",
+      "mapLink": "https://maps.google.com/?q=30.05,31.33"
+    }
+  ],
+  "socialMediaLinks": [
+    {
+      "name": "Facebook",
+      "link": "https://www.facebook.com/example"
+    }
+  ]
+}
+```
+
+Sample government shipping fees payload:
+```json
+{
+  "governmentFees": [
+    {
+      "government": "Cairo",
+      "shippingFees": 50
+    },
+    {
+      "government": "Giza",
+      "shippingFees": 60
+    }
+  ]
+}
+```
+
+Sample free shipping minimum payload:
+```json
+{
+  "freeShippingMinimumAmount": 1000
+}
+```
+
 ### Customers
 - `GET /api/customers`
 - `GET /api/customers?search=<name_or_phone>`
@@ -229,6 +328,68 @@ Sample customer payment payload:
   "note": "Customer installment"
 }
 ```
+
+### Cart
+- `POST /api/cart/checkout`
+
+Creates a new selling invoice row, deducts stock, creates/updates the customer by phone, and stores the submitted shipping location and government. The selected government must exist in the configured government shipping fees. The backend calculates `shippingFees` from that setting and applies free shipping when the cart subtotal reaches a configured non-zero `freeShippingMinimumAmount`.
+
+Sample checkout payload:
+```json
+{
+  "customerName": "Ahmed Ali",
+  "customerPhone": "+201234567890",
+  "government": "Cairo",
+  "shippingLocation": "Cairo, Nasr City",
+  "products": [
+    {
+      "productId": "66b0b7b5a8c197aa0adf1234",
+      "price": 15,
+      "quantity": 2
+    },
+    {
+      "productId": "66b0b7b5a8c197aa0adf5678",
+      "price": 30
+    }
+  ]
+}
+```
+
+`quantity` is optional for cart products and defaults to `1`.
+
+### Website Image Targeting
+
+- `POST /api/website-images`
+- `GET /api/website-images`
+- `GET /api/website-images/active`
+- `GET /api/website-images/active-with-products`
+- `GET /api/website-images/:id`
+- `GET /api/website-images/:id/image`
+- `PUT /api/website-images/:id`
+- `DELETE /api/website-images/:id`
+- `GET /api/website-images/:id/products`
+
+Example price-targeted image:
+
+```json
+{
+  "title": "Summer offer",
+  "imageBase64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
+  "targetType": "price",
+  "categoryIds": ["66b0b7b5a8c197aa0adf1234"],
+  "maxPrice": 500,
+  "isActive": true
+}
+```
+
+Targeting rules:
+
+- `category` requires at least one `categoryIds` entry and resolves no products.
+- `product` requires at least one `productIds` entry.
+- `both` requires at least one category and one product.
+- `price` requires `maxPrice` and resolves products using `retailPrice`. Optional `categoryIds` restrict the price query to those categories.
+- Duplicate IDs are removed, and every referenced category and product must exist.
+- `active-with-products` returns `imageUrl` instead of repeating the large `imageBase64` value. Use that URL directly as the image source.
 
 ### Credit Sales
 - `GET /api/credit-sales`

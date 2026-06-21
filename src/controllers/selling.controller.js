@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Customer = require("../models/customer.model");
 const Product = require("../models/product.model");
 const Selling = require("../models/selling.model");
+const ShippingSetting = require("../models/shippingSetting.model");
 const asyncHandler = require("../utils/asyncHandler");
 const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
 
@@ -116,6 +117,19 @@ const normalizeRequiredString = (value, fieldLabel, res) => {
   return value.trim();
 };
 
+const normalizeOptionalString = (value, fieldLabel, res) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    res.status(400);
+    throw new Error(`${fieldLabel} غير صالح`);
+  }
+
+  return value.trim();
+};
+
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const getUtcDayRange = (dateValue) => {
@@ -143,7 +157,7 @@ const getSellingItemProductId = (item) => {
   return item.product;
 };
 
-const normalizeSellingItems = (body, res) => {
+const normalizeSellingItems = (body, res, options = {}) => {
   if (body.items !== undefined) {
     if (!Array.isArray(body.items)) {
       res.status(400);
@@ -163,7 +177,7 @@ const normalizeSellingItems = (body, res) => {
       }
 
       const { productId, price } = item;
-      const rawQuantity = getRawQuantity(item);
+      const rawQuantity = getRawQuantity(item) ?? options.defaultQuantity;
 
       if (!productId) {
         res.status(400);
@@ -206,7 +220,7 @@ const normalizeSellingItems = (body, res) => {
   }
 
   const { productId, price } = body;
-  const rawQuantity = getRawQuantity(body);
+  const rawQuantity = getRawQuantity(body) ?? options.defaultQuantity;
 
   if (!productId) {
     res.status(400);
@@ -329,6 +343,8 @@ const toSellingInvoice = (selling, options = {}) => {
     invoiceId: getInvoiceIdentifier(selling),
     customerName: selling.customerName,
     customerPhone: selling.customerPhone ?? null,
+    shippingLocation: selling.shippingLocation ?? null,
+    government: selling.government ?? null,
     sellingDate: selling.sellingDate,
     itemCount: items.length,
     totalQuantity: selling.totalQuantity ?? totals.totalQuantity,
@@ -519,13 +535,24 @@ const hasLineItemChanges = (body) =>
   body.price !== undefined ||
   getRawQuantity(body) !== undefined;
 
-const createSelling = asyncHandler(async (req, res) => {
-  const { customerName, customerPhone } = req.body;
+const createSellingInvoice = async ({ body, res, options = {} }) => {
+  const { customerName, customerPhone } = body;
   const normalizedCustomerName = normalizeRequiredString(customerName, "اسم العميل", res);
   const normalizedCustomerPhone = normalizeRequiredString(customerPhone, "رقم هاتف العميل", res);
-  const normalizedSellingDate = normalizeSellingDate(req.body.sellingDate, res);
-  const items = normalizeSellingItems(req.body, res);
-  const invoicePricing = resolveInvoicePricing(req.body, {}, res);
+  const normalizedShippingLocation = options.requireShippingLocation
+    ? normalizeRequiredString(body.shippingLocation, "عنوان الشحن", res)
+    : normalizeOptionalString(body.shippingLocation, "عنوان الشحن", res);
+  const normalizedGovernment = options.requireGovernment
+    ? normalizeRequiredString(body.government, "المحافظة", res)
+    : normalizeOptionalString(body.government, "المحافظة", res);
+  const normalizedSellingDate =
+    body.sellingDate === undefined && options.defaultSellingDate
+      ? options.defaultSellingDate
+      : normalizeSellingDate(body.sellingDate, res);
+  const items = normalizeSellingItems(body, res, {
+    defaultQuantity: options.defaultQuantity,
+  });
+  const invoicePricing = resolveInvoicePricing(body, {}, res);
 
   await ensureCustomerExistsForSelling({
     customerName: normalizedCustomerName,
@@ -545,6 +572,8 @@ const createSelling = asyncHandler(async (req, res) => {
     selling = await Selling.create({
       customerName: normalizedCustomerName,
       customerPhone: normalizedCustomerPhone,
+      shippingLocation: normalizedShippingLocation,
+      government: normalizedGovernment,
       sellingDate: normalizedSellingDate,
       items: persistedItems,
       totalQuantity: invoiceTotals.totalQuantity,
@@ -565,6 +594,102 @@ const createSelling = asyncHandler(async (req, res) => {
 
     throw error;
   }
+
+  return selling;
+};
+
+const normalizeCartCheckoutItems = (products, res) => {
+  if (!Array.isArray(products)) {
+    res.status(400);
+    throw new Error("يجب أن تكون products مصفوفة");
+  }
+
+  if (products.length === 0) {
+    res.status(400);
+    throw new Error("يجب أن تحتوي products على منتج واحد على الأقل");
+  }
+
+  return products.map((product, index) => {
+    const itemNumber = index + 1;
+    if (!product || typeof product !== "object" || Array.isArray(product)) {
+      res.status(400);
+      throw new Error(`المنتج رقم ${itemNumber} غير صالح`);
+    }
+
+    return {
+      productId: product.productId ?? product.id ?? product._id,
+      price: product.price,
+      quantity: product.quantity ?? product.quentity,
+    };
+  });
+};
+
+const createSelling = asyncHandler(async (req, res) => {
+  const selling = await createSellingInvoice({
+    body: req.body,
+    res,
+  });
+
+  res.status(201).json(toSellingInvoice(selling));
+});
+
+const checkoutCart = asyncHandler(async (req, res) => {
+  const government = normalizeRequiredString(
+    req.body.government ?? req.body.governorate,
+    "المحافظة",
+    res
+  );
+  const shippingSetting = await ShippingSetting.findOne({ key: "default" }).lean();
+  const governmentFee = shippingSetting?.governmentFees?.find(
+    (item) => item.government.trim().toLowerCase() === government.toLowerCase()
+  );
+
+  if (!governmentFee) {
+    res.status(400);
+    throw new Error("المحافظة المحددة غير موجودة في إعدادات مصاريف الشحن");
+  }
+
+  const cartItems =
+    req.body.products !== undefined
+      ? normalizeCartCheckoutItems(req.body.products, res)
+      : req.body.items;
+  const normalizedCartItems = normalizeSellingItems(
+    { items: cartItems },
+    res,
+    { defaultQuantity: 1 }
+  );
+  const cartSubtotal = roundMoney(
+    normalizedCartItems.reduce(
+      (total, item) => total + item.unitPrice * item.quantity,
+      0
+    )
+  );
+  const freeShippingMinimumAmount = Number(
+    shippingSetting.freeShippingMinimumAmount || 0
+  );
+  const qualifiesForFreeShipping =
+    freeShippingMinimumAmount > 0 && cartSubtotal >= freeShippingMinimumAmount;
+
+  const selling = await createSellingInvoice({
+    body: {
+      ...req.body,
+      government: governmentFee.government,
+      shippingFees: qualifiesForFreeShipping ? 0 : governmentFee.shippingFees,
+      sellingDate: req.body.sellingDate ?? new Date(),
+      items: normalizedCartItems.map((item) => ({
+        productId: item.productId,
+        price: item.unitPrice,
+        quantity: item.quantity,
+      })),
+    },
+    res,
+    options: {
+      defaultQuantity: 1,
+      defaultSellingDate: new Date(),
+      requireShippingLocation: true,
+      requireGovernment: true,
+    },
+  });
 
   res.status(201).json(toSellingInvoice(selling));
 });
@@ -690,6 +815,10 @@ const updateSelling = asyncHandler(async (req, res) => {
     req.body.customerPhone !== undefined
       ? normalizeRequiredString(req.body.customerPhone, "رقم هاتف العميل", res)
       : selling.customerPhone;
+  const normalizedShippingLocation =
+    req.body.shippingLocation !== undefined
+      ? normalizeOptionalString(req.body.shippingLocation, "عنوان الشحن", res)
+      : selling.shippingLocation;
   const normalizedSellingDate =
     req.body.sellingDate !== undefined
       ? normalizeSellingDate(req.body.sellingDate, res)
@@ -773,6 +902,7 @@ const updateSelling = asyncHandler(async (req, res) => {
 
   selling.customerName = normalizedCustomerName;
   selling.customerPhone = normalizedCustomerPhone;
+  selling.shippingLocation = normalizedShippingLocation;
   selling.sellingDate = normalizedSellingDate;
 
   let updatedSelling;
@@ -816,6 +946,7 @@ const deleteSelling = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  checkoutCart,
   createSelling,
   getSellings,
   getSellingById,
