@@ -106,10 +106,20 @@ npm start
 
 ### Categories
 - `GET /api/categories`
+- `GET /api/categories/export`
 - `GET /api/categories/:id`
 - `POST /api/categories`
+- `POST /api/categories/import` (multipart form-data with an `.xlsx` file in the `file` field)
 - `PUT /api/categories/:id`
 - `DELETE /api/categories/:id`
+
+Category exports contain a `Categories` sheet and a `Products` sheet. The
+`Products` sheet contains one row per product with its complete inventory,
+pricing, image, specifications, timestamps, and category details. Oversized
+Base64 values are continued in numbered columns such as `ImageBase64_2`.
+Category imports process both worksheets, link products using `CategoryName`,
+and return `productImportedCount`, `productSkippedCount`, and `productErrors`
+alongside the category import result.
 
 Sample category payload:
 ```json
