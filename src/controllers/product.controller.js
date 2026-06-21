@@ -11,6 +11,32 @@ const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const CATEGORY_PRODUCT_FIELDS = "name image specifications";
 
+// Pagination defaults and limits are kept in one place so the endpoint's
+// validation rules cannot drift from the values returned in its metadata.
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 100;
+const MAX_PAGE = Math.floor(Number.MAX_SAFE_INTEGER / MAX_LIMIT);
+
+// Query string values are untrusted strings (or arrays). Only positive, safe
+// integers are accepted; invalid values fall back to the documented defaults.
+const parsePaginationInteger = (value, defaultValue, maxValue = Infinity) => {
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim())) {
+    return defaultValue;
+  }
+
+  const parsedValue = Number(value);
+  if (
+    !Number.isSafeInteger(parsedValue) ||
+    parsedValue < 1 ||
+    parsedValue > maxValue
+  ) {
+    return defaultValue;
+  }
+
+  return parsedValue;
+};
+
 const isTruthyFlag = (value) => {
   if (typeof value === "string") {
     const normalizedValue = value.trim().toLowerCase();
@@ -346,6 +372,13 @@ const buildProductProfitRows = async ({ products, startDate, endDate }) => {
 const getProducts = asyncHandler(async (req, res) => {
   const { categoryId } = req.query;
 
+  // Invalid page/limit values intentionally use defaults instead of returning
+  // an error, as required by the public API contract.
+  const limit = parsePaginationInteger(req.query.limit, DEFAULT_LIMIT, MAX_LIMIT);
+  // Cap the page at a technical maximum that guarantees a safe skip value.
+  const page = parsePaginationInteger(req.query.page, DEFAULT_PAGE, MAX_PAGE);
+  const skip = (page - 1) * limit;
+
   if (!categoryId) {
     res.status(400);
     throw new Error("مطلوب معامل الاستعلام categoryId");
@@ -357,11 +390,35 @@ const getProducts = asyncHandler(async (req, res) => {
     throw new Error("لم يتم العثور على فئة للمعرّف المقدم");
   }
 
-  const products = await Product.find({ category: categoryId })
-    .populate("category", CATEGORY_PRODUCT_FIELDS)
-    .sort({ createdAt: -1 });
+  const filter = { category: categoryId };
 
-  res.json(products);
+  // Count and fetch use the exact same filter. skip/limit are applied by
+  // MongoDB, so only the requested page is loaded into application memory.
+  const [products, totalItems] = await Promise.all([
+    Product.find(filter)
+      .populate("category", CATEGORY_PRODUCT_FIELDS)
+      // Keep the existing newest-first order and make ties deterministic so
+      // records do not move between pages when createdAt values are equal.
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit),
+    Product.countDocuments(filter),
+  ]);
+
+  const totalPages = Math.ceil(totalItems / limit);
+
+  res.json({
+    success: true,
+    data: products,
+    pagination: {
+      page,
+      limit,
+      totalItems,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+    },
+  });
 });
 
 const searchProducts = asyncHandler(async (req, res) => {
