@@ -95,6 +95,18 @@ const parseRequiredNonNegativeNumber = (value, fieldName) => {
   return parsedValue;
 };
 
+const parseOptionalNonNegativeNumber = (value, fieldName, defaultValue = 0) => {
+  const serializedValue = normalizeStringCell(value);
+  if (!serializedValue) return defaultValue;
+
+  const parsedValue = Number(serializedValue);
+  if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+    throw new Error(`${fieldName} must be a non-negative number`);
+  }
+
+  return parsedValue;
+};
+
 const parseOptionalDate = (value, fieldName) => {
   const serializedValue = normalizeStringCell(value);
   if (!serializedValue) return undefined;
@@ -134,7 +146,7 @@ const validateProductImportRow = ({ rowNumber, values }) => {
     values.WholesalePrice,
     "WholesalePrice"
   );
-  const purchasePrice = parseRequiredNonNegativeNumber(
+  const purchasePrice = parseOptionalNonNegativeNumber(
     values.PurchasePrice,
     "PurchasePrice"
   );
@@ -323,25 +335,11 @@ const importCategories = async (buffer) => {
   const candidateProductIds = validatedProductRows
     .map((row) => row.productId)
     .filter(Boolean);
-  const candidateProductCodes = [
-    ...new Set(validatedProductRows.map((row) => row.product.code)),
-  ];
-  const duplicateFilters = [];
-  if (candidateProductIds.length > 0) {
-    duplicateFilters.push({ _id: { $in: candidateProductIds } });
-  }
-  if (candidateProductCodes.length > 0) {
-    duplicateFilters.push({ code: { $in: candidateProductCodes } });
-  }
-
-  const existingProducts = duplicateFilters.length
-    ? await Product.find({ $or: duplicateFilters }).select("_id code").lean()
+  const existingProducts = candidateProductIds.length
+    ? await Product.find({ _id: { $in: candidateProductIds } }).select("_id").lean()
     : [];
   const usedProductIds = new Set(
     existingProducts.map((product) => product._id.toString())
-  );
-  const usedProductCodes = new Set(
-    existingProducts.map((product) => product.code)
   );
   const productRowsToInsert = [];
 
@@ -355,19 +353,15 @@ const importCategories = async (buffer) => {
       continue;
     }
 
-    if (
-      (row.productId && usedProductIds.has(row.productId)) ||
-      usedProductCodes.has(row.product.code)
-    ) {
+    if (row.productId && usedProductIds.has(row.productId)) {
       productErrors.push({
         row: row.rowNumber,
-        message: `Duplicate product ID or code: ${row.product.code}`,
+        message: `Duplicate product ID: ${row.productId}`,
       });
       continue;
     }
 
     if (row.productId) usedProductIds.add(row.productId);
-    usedProductCodes.add(row.product.code);
     row.product.category = categoryId;
     productRowsToInsert.push(row);
   }
@@ -395,7 +389,7 @@ const importCategories = async (buffer) => {
           row: productRowsToInsert[failedIndex].rowNumber,
           message:
             writeError.code === 11000
-              ? `Duplicate product: ${productRowsToInsert[failedIndex].product.code}`
+              ? `Duplicate product ID: ${productRowsToInsert[failedIndex].product._id}`
               : writeError.errmsg || writeError.message || "Database insert failed",
         });
       }

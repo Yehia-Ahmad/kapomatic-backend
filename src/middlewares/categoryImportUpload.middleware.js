@@ -1,7 +1,7 @@
 const path = require("path");
 const multer = require("multer");
 
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
 const upload = multer({
   // Memory storage is appropriate because the service reads the workbook from
