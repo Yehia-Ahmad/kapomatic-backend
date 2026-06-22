@@ -47,6 +47,7 @@ const toCreditSaleRefund = (refund, options = {}) => ({
   totalAmount: refund.totalAmount,
   returnedPaidAmount: refund.returnedPaidAmount ?? 0,
   reallocatedPaidAmount: refund.reallocatedPaidAmount ?? 0,
+  returnLogId: refund.returnLog ?? null,
   items: Array.isArray(refund.items)
     ? refund.items.map((item) => toCreditSaleRefundItem(item, options))
     : [],

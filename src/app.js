@@ -8,6 +8,7 @@ const creditSaleRoutes = require("./routes/creditSale.routes");
 const customerRoutes = require("./routes/customer.routes");
 const ecommerceSettingRoutes = require("./routes/ecommerceSetting.routes");
 const productRoutes = require("./routes/product.routes");
+const returnsRoutes = require("./routes/returns.routes");
 const sellingRoutes = require("./routes/selling.routes");
 const websiteImageRoutes = require("./routes/websiteImage.routes");
 const notFound = require("./middlewares/notFound.middleware");
@@ -29,6 +30,7 @@ app.use("/api/credit-sales", creditSaleRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/ecommerce-settings", ecommerceSettingRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/returns", returnsRoutes);
 app.use("/api/sellings", sellingRoutes);
 app.use("/api/website-images", websiteImageRoutes);
 

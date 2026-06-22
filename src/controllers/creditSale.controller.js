@@ -2,7 +2,9 @@ const mongoose = require("mongoose");
 const CreditSale = require("../models/creditSale.model");
 const Customer = require("../models/customer.model");
 const Product = require("../models/product.model");
+const ReturnLog = require("../models/returnLog.model");
 const asyncHandler = require("../utils/asyncHandler");
+const { createReturnLog } = require("../services/returns.service");
 const { toCreditSaleInvoice } = require("../utils/creditSaleFormatter");
 const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
 
@@ -866,6 +868,7 @@ const normalizeCreditSaleRefundItems = (creditSale, body, res) => {
     return currentItems.map((item) => ({
       invoiceItem: item,
       quantity: Number(item.quantity),
+      returnReason: undefined,
     }));
   }
 
@@ -908,6 +911,12 @@ const normalizeCreditSaleRefundItems = (creditSale, body, res) => {
       throw new Error(`يجب أن تكون كمية المرتجع رقمًا صحيحًا موجبًا في العنصر رقم ${itemNumber}`);
     }
 
+    const returnReason = getFirstDefined(refundItem.returnReason, refundItem.reason);
+    if (returnReason !== undefined && (typeof returnReason !== "string" || returnReason.trim().length > 500)) {
+      res.status(400);
+      throw new Error(`سبب المرتجع غير صالح في العنصر رقم ${itemNumber}`);
+    }
+
     const itemKey = invoiceItem._id.toString();
     const existingSelection = refundSelectionsByItemId.get(itemKey) || {
       invoiceItem,
@@ -923,6 +932,7 @@ const normalizeCreditSaleRefundItems = (creditSale, body, res) => {
     refundSelectionsByItemId.set(itemKey, {
       invoiceItem,
       quantity: nextQuantity,
+      returnReason: returnReason?.trim() || existingSelection.returnReason,
     });
   }
 
@@ -1534,6 +1544,8 @@ const addCreditSaleRefund = asyncHandler(async (req, res) => {
   );
 
   const currentItems = getCreditSaleItemInputs(creditSale);
+  const originalTotalPrice = Number(creditSale.totalPrice || 0);
+  const originalShippingFees = Number(creditSale.shippingFees || 0);
   const nextItems = buildNextCreditSaleItemsAfterRefund(creditSale, refundSelections);
   const productsById = await applyInventoryForInvoiceChange({
     currentItems,
@@ -1543,6 +1555,7 @@ const addCreditSaleRefund = asyncHandler(async (req, res) => {
 
   let updatedCreditSale;
   let reallocatedUpdates = [];
+  let returnLog;
 
   try {
     const persistedItems = buildPersistedItems(nextItems, productsById);
@@ -1637,6 +1650,25 @@ const addCreditSaleRefund = asyncHandler(async (req, res) => {
       reallocatedPaidAmount: reallocatedPaidAmountForThisRefund,
     });
 
+    const subtotalReturnedAmount = roundMoney(refundTotals.totalAmount);
+    const finalReturnedAmount = roundMoney(Math.max(0, originalTotalPrice - Number(invoiceTotals.totalPrice || 0)));
+    const returnedShippingFees = isFullRefund ? roundMoney(originalShippingFees) : 0;
+    const returnedDiscountAmount = roundMoney(Math.max(0, subtotalReturnedAmount + returnedShippingFees - finalReturnedAmount));
+    returnLog = await createReturnLog({
+      returnType: "credit", invoiceId: creditSale._id,
+      customerName: creditSale.customerName, customerPhone: creditSale.customerPhone,
+      returnDate: refundDate, note: refundNote,
+      items: refundSelections.map(({ invoiceItem, quantity, returnReason }) => {
+        const productId = getCreditSaleItemProductId(invoiceItem);
+        const price = roundMoney(invoiceItem.unitPrice || 0);
+        return { productId, productName: invoiceItem.productName, productCode: productsById.get(productId.toString())?.code, quantity, price, total: roundMoney(price * quantity), returnReason };
+      }),
+      subtotalReturnedAmount, discountAmount: returnedDiscountAmount,
+      shippingFees: returnedShippingFees, finalReturnedAmount,
+      createdBy: req.user?._id ?? req.user?.id,
+    });
+    creditSale.refunds[creditSale.refunds.length - 1].returnLog = returnLog._id;
+
     const refundHistoryTotals = buildRefundHistoryTotals(creditSale.refunds);
     creditSale.refundedQuantity = refundHistoryTotals.refundedQuantity;
     creditSale.refundedAmount = refundHistoryTotals.refundedAmount;
@@ -1644,6 +1676,7 @@ const addCreditSaleRefund = asyncHandler(async (req, res) => {
 
     updatedCreditSale = await creditSale.save();
   } catch (error) {
+    if (returnLog) { try { await ReturnLog.deleteOne({ _id: returnLog._id }); } catch (_rollbackError) {} }
     if (reallocatedUpdates.length > 0) {
       await rollbackCreditSaleFinancialUpdates(reallocatedUpdates);
     }

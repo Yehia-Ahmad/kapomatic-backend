@@ -44,6 +44,25 @@ const sellingItemSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const sellingRefundItemSchema = new mongoose.Schema({
+  invoiceItemId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+  productName: { type: String, required: true, trim: true, maxlength: 200 },
+  quantity: { type: Number, required: true, min: 1 },
+  unitPrice: { type: Number, required: true, min: 0 },
+  totalPrice: { type: Number, required: true, min: 0 },
+  returnReason: { type: String, trim: true, maxlength: 500 },
+}, { _id: true });
+
+const sellingRefundSchema = new mongoose.Schema({
+  refundDate: { type: Date, required: true },
+  note: { type: String, trim: true, maxlength: 1000 },
+  items: { type: [sellingRefundItemSchema], required: true },
+  totalQuantity: { type: Number, required: true, min: 1 },
+  totalAmount: { type: Number, required: true, min: 0 },
+  returnLog: { type: mongoose.Schema.Types.ObjectId, ref: "ReturnLog" },
+}, { _id: true });
+
 const sellingSchema = new mongoose.Schema(
   {
     invoiceId: {
@@ -127,6 +146,10 @@ const sellingSchema = new mongoose.Schema(
       required: [true, "السعر الإجمالي مطلوب"],
       min: [0, "السعر الإجمالي لا يمكن أن يكون سالبًا"],
     },
+    refundStatus: { type: String, enum: ["none", "partial", "full"], default: "none", index: true },
+    refundedQuantity: { type: Number, default: 0, min: 0 },
+    refundedAmount: { type: Number, default: 0, min: 0 },
+    refunds: { type: [sellingRefundSchema], default: [] },
   },
   { timestamps: true }
 );

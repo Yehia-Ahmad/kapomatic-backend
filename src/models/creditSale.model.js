@@ -142,6 +142,7 @@ const creditSaleRefundSchema = new mongoose.Schema(
       default: 0,
       min: [0, "المبلغ المدفوع المُعاد توزيعه لا يمكن أن يكون سالبًا"],
     },
+    returnLog: { type: mongoose.Schema.Types.ObjectId, ref: "ReturnLog" },
   },
   { _id: true }
 );

@@ -3,7 +3,9 @@ const Customer = require("../models/customer.model");
 const Product = require("../models/product.model");
 const Selling = require("../models/selling.model");
 const ShippingSetting = require("../models/shippingSetting.model");
+const ReturnLog = require("../models/returnLog.model");
 const asyncHandler = require("../utils/asyncHandler");
+const { createReturnLog } = require("../services/returns.service");
 const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
 
 const getRawQuantity = (body) => {
@@ -354,8 +356,72 @@ const toSellingInvoice = (selling, options = {}) => {
     totalProfit: roundMoney(
       items.reduce((sum, item) => sum + Number(item.profitAmount || 0), 0) - totals.discountAmount
     ),
+    refundStatus: selling.refundStatus ?? "none",
+    refundedQuantity: selling.refundedQuantity ?? 0,
+    refundedAmount: selling.refundedAmount ?? 0,
+    refunds: (selling.refunds || []).map((refund) => ({
+      _id: refund._id,
+      refundDate: refund.refundDate,
+      note: refund.note ?? null,
+      totalQuantity: refund.totalQuantity,
+      totalAmount: refund.totalAmount,
+      returnLogId: refund.returnLog ?? null,
+      items: (refund.items || []).map((item) => ({
+        _id: item._id,
+        invoiceItemId: item.invoiceItemId,
+        productId: getSellingItemProductId(item),
+        productName: item.productName,
+        productCode: options.includeProductCode && typeof item.product === "object" ? item.product.code ?? null : undefined,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        returnReason: item.returnReason ?? null,
+      })),
+    })),
     items,
   };
+};
+
+const refundedForItem = (selling, itemId) => (selling.refunds || []).reduce(
+  (total, refund) => total + (refund.items || []).reduce(
+    (sum, item) => sum + (item.invoiceItemId?.toString() === itemId.toString() ? Number(item.quantity) : 0), 0
+  ), 0
+);
+
+const normalizeRefundSelections = (selling, body, res) => {
+  if (!Array.isArray(body.items) || body.items.length === 0) { res.status(400); throw new Error("يجب أن تحتوي items على عنصر واحد على الأقل"); }
+  const invoiceItems = getSellingItems(selling);
+  const selections = new Map();
+  body.items.forEach((input, index) => {
+    const number = index + 1;
+    if (!input || typeof input !== "object" || Array.isArray(input)) { res.status(400); throw new Error(`عنصر المرتجع رقم ${number} غير صالح`); }
+    const itemId = typeof input.itemId === "string" ? input.itemId.trim() : "";
+    const productId = typeof input.productId === "string" ? input.productId.trim() : "";
+    if (!itemId && !productId) { res.status(400); throw new Error(`productId أو itemId مطلوب في العنصر رقم ${number}`); }
+    if ((itemId && !mongoose.Types.ObjectId.isValid(itemId)) || (productId && !mongoose.Types.ObjectId.isValid(productId))) {
+      res.status(400); throw new Error(`تنسيق المعرّف غير صالح في العنصر رقم ${number}`);
+    }
+    const matches = itemId
+      ? invoiceItems.filter((item) => item._id?.toString() === itemId)
+      : invoiceItems.filter((item) => getSellingItemProductId(item)?.toString() === productId);
+    if (!matches.length) { res.status(404); throw new Error(`المنتج غير موجود في الفاتورة لعنصر المرتجع رقم ${number}`); }
+    if (matches.length > 1) { res.status(400); throw new Error(`يجب استخدام itemId للعنصر رقم ${number} لتجنب التكرار`); }
+    const quantity = parsePositiveInteger(input.quantity);
+    if (quantity === null) { res.status(400); throw new Error(`كمية المرتجع غير صالحة في العنصر رقم ${number}`); }
+    if (input.returnReason !== undefined && (typeof input.returnReason !== "string" || input.returnReason.trim().length > 500)) {
+      res.status(400); throw new Error(`سبب المرتجع غير صالح في العنصر رقم ${number}`);
+    }
+    const invoiceItem = matches[0];
+    const key = invoiceItem._id.toString();
+    const selection = selections.get(key) || { invoiceItem, quantity: 0 };
+    selection.quantity += quantity;
+    selection.returnReason = input.returnReason?.trim() || selection.returnReason;
+    if (selection.quantity > Number(invoiceItem.quantity) - refundedForItem(selling, invoiceItem._id)) {
+      res.status(400); throw new Error(`كمية المرتجع تتجاوز الكمية المتاحة في العنصر رقم ${number}`);
+    }
+    selections.set(key, selection);
+  });
+  return [...selections.values()];
 };
 
 const ensureCustomerExistsForSelling = async ({ customerName, customerPhone }) => {
@@ -782,6 +848,7 @@ const getSellings = asyncHandler(async (req, res) => {
   const sellings = await Selling.find(sellingQuery)
     .populate("items.product", "code")
     .populate("product", "code")
+    .populate("refunds.items.product", "code")
     .sort({ sellingDate: -1, createdAt: -1 });
   res.json(sellings.map((selling) => toSellingInvoice(selling, { includeProductCode: true })));
 });
@@ -789,7 +856,8 @@ const getSellings = asyncHandler(async (req, res) => {
 const getSellingById = asyncHandler(async (req, res) => {
   const selling = await Selling.findById(req.params.id)
     .populate("items.product", "code")
-    .populate("product", "code");
+    .populate("product", "code")
+    .populate("refunds.items.product", "code");
 
   if (!selling) {
     res.status(404);
@@ -830,6 +898,10 @@ const updateSelling = asyncHandler(async (req, res) => {
     shouldUpdateItems ||
     req.body.discountAmount !== undefined ||
     req.body.shippingFees !== undefined;
+  if (shouldUpdateInvoicePricing && selling.refunds?.length) {
+    res.status(400);
+    throw new Error("لا يمكن تعديل عناصر أو تسعير فاتورة تحتوي على مرتجعات");
+  }
   const currentItems = getSellingItemInputs(selling);
 
   let nextItems = currentItems;
@@ -936,7 +1008,10 @@ const deleteSelling = asyncHandler(async (req, res) => {
   }
 
   await applyInventoryForInvoiceChange({
-    currentItems: getSellingItemInputs(selling),
+    currentItems: getSellingItems(selling).map((item) => ({
+      ...toSellingItemInput(item),
+      quantity: Math.max(0, Number(item.quantity) - refundedForItem(selling, item._id)),
+    })),
     nextItems: [],
     res,
   });
@@ -945,11 +1020,90 @@ const deleteSelling = asyncHandler(async (req, res) => {
   res.json({ message: "Selling invoice deleted successfully" });
 });
 
+const addSellingRefund = asyncHandler(async (req, res) => {
+  const selling = await Selling.findById(req.params.id);
+  if (!selling) { res.status(404); throw new Error("سجل البيع غير موجود"); }
+
+  const selections = normalizeRefundSelections(selling, req.body, res);
+  const refundDate = new Date(req.body.returnDate ?? req.body.refundDate ?? Date.now());
+  if (Number.isNaN(refundDate.getTime())) { res.status(400); throw new Error("تنسيق تاريخ المرتجع غير صالح"); }
+  const note = req.body.note;
+  if (note !== undefined && (typeof note !== "string" || note.trim().length > 1000)) { res.status(400); throw new Error("ملاحظة المرتجع غير صالحة"); }
+
+  const productIds = [...new Set(selections.map(({ invoiceItem }) => getSellingItemProductId(invoiceItem).toString()))];
+  const products = await Product.find({ _id: { $in: productIds } });
+  if (products.length !== productIds.length) { res.status(404); throw new Error("تعذر العثور على أحد منتجات المرتجع"); }
+  const productsById = new Map(products.map((product) => [product._id.toString(), product]));
+  const snapshots = products.map((product) => ({ product, inventoryCount: Number(product.inventoryCount || 0), soldItemCount: Number(product.soldItemCount || 0) }));
+  const refundItems = selections.map(({ invoiceItem, quantity, returnReason }) => {
+    const unitPrice = roundMoney(invoiceItem.unitPrice || 0);
+    return { invoiceItemId: invoiceItem._id, product: getSellingItemProductId(invoiceItem), productName: invoiceItem.productName, quantity, unitPrice, totalPrice: roundMoney(unitPrice * quantity), returnReason };
+  });
+  const totalQuantity = refundItems.reduce((sum, item) => sum + item.quantity, 0);
+  const subtotalReturnedAmount = roundMoney(refundItems.reduce((sum, item) => sum + item.totalPrice, 0));
+  const originalInvoiceTotals = buildInvoiceTotals(getSellingItems(selling), {
+    discountAmount: selling.discountAmount,
+    discountPercentage: selling.discountPercentage,
+    shippingFees: selling.shippingFees,
+  });
+  const invoiceQuantity = Number(selling.totalQuantity ?? originalInvoiceTotals.totalQuantity);
+  const previousRefundedQuantity = (selling.refunds || []).reduce(
+    (sum, refund) => sum + Number(refund.totalQuantity || 0),
+    0
+  );
+  const previousRefundedAmount = (selling.refunds || []).reduce(
+    (sum, refund) => sum + Number(refund.totalAmount || 0),
+    0
+  );
+  const isFull = previousRefundedQuantity + totalQuantity === invoiceQuantity;
+  const discountAmount = isFull ? originalInvoiceTotals.discountAmount : 0;
+  const shippingFees = isFull ? originalInvoiceTotals.shippingFees : 0;
+  const finalReturnedAmount = roundMoney(Math.max(0, subtotalReturnedAmount - discountAmount + shippingFees));
+  let returnLog;
+
+  try {
+    for (const { invoiceItem, quantity } of selections) {
+      const product = productsById.get(getSellingItemProductId(invoiceItem).toString());
+      product.inventoryCount = Number(product.inventoryCount || 0) + quantity;
+      product.soldItemCount = Math.max(0, Number(product.soldItemCount || 0) - quantity);
+    }
+    for (const product of products) await product.save();
+
+    returnLog = await createReturnLog({
+      returnType: "cash", invoiceId: selling._id, invoiceNumber: selling.invoiceId?.toString(),
+      customerName: selling.customerName, customerPhone: selling.customerPhone,
+      returnDate: refundDate, note: note?.trim() || undefined,
+      items: refundItems.map((item) => ({ productId: item.product, productName: item.productName, productCode: productsById.get(item.product.toString()).code, quantity: item.quantity, price: item.unitPrice, total: item.totalPrice, returnReason: item.returnReason })),
+      subtotalReturnedAmount, discountAmount, shippingFees, finalReturnedAmount,
+      createdBy: req.user?._id ?? req.user?.id,
+    });
+    selling.refunds.push({ refundDate, note: note?.trim() || undefined, items: refundItems, totalQuantity, totalAmount: finalReturnedAmount, returnLog: returnLog._id });
+    selling.refundedQuantity = previousRefundedQuantity + totalQuantity;
+    selling.refundedAmount = roundMoney(previousRefundedAmount + finalReturnedAmount);
+    selling.refundStatus = isFull ? "full" : "partial";
+    await selling.save();
+  } catch (error) {
+    if (returnLog) { try { await ReturnLog.deleteOne({ _id: returnLog._id }); } catch (_rollbackError) {} }
+    for (const snapshot of snapshots) {
+      snapshot.product.inventoryCount = snapshot.inventoryCount;
+      snapshot.product.soldItemCount = snapshot.soldItemCount;
+      try { await snapshot.product.save(); } catch (_rollbackError) {}
+    }
+    throw error;
+  }
+
+  await selling.populate("items.product", "code");
+  await selling.populate("product", "code");
+  await selling.populate("refunds.items.product", "code");
+  res.status(201).json({ success: true, data: { invoice: toSellingInvoice(selling, { includeProductCode: true }), returnLog } });
+});
+
 module.exports = {
   checkoutCart,
   createSelling,
   getSellings,
   getSellingById,
   updateSelling,
+  addSellingRefund,
   deleteSelling,
 };
