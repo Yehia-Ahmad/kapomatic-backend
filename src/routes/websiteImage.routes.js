@@ -4,6 +4,7 @@ const {
   getWebsiteImages,
   getActiveWebsiteImages,
   getActiveWebsiteImagesWithProducts,
+  getWebsiteImageSpecifications,
   getWebsiteImageAsset,
   getWebsiteImageById,
   getWebsiteImageProducts,
@@ -16,6 +17,7 @@ const router = express.Router();
 router.route("/").get(getWebsiteImages).post(createWebsiteImage);
 router.get("/active", getActiveWebsiteImages);
 router.get("/active-with-products", getActiveWebsiteImagesWithProducts);
+router.get("/specifications", getWebsiteImageSpecifications);
 router.get("/:id/image", getWebsiteImageAsset);
 router.get("/:id/products", getWebsiteImageProducts);
 router

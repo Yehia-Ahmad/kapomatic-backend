@@ -2105,6 +2105,67 @@
           "response": []
         },
         {
+          "name": "Create Specification Website Image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Specification website image is created\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(data.targetType).to.eql(\"specification\");",
+                  "  pm.expect(data.categoryIds).to.be.an(\"array\").that.is.not.empty;",
+                  "  pm.expect(data.specificationFilters).to.be.an(\"array\").that.is.not.empty;",
+                  "});",
+                  "if (data && data._id) pm.collectionVariables.set(\"websiteImageId\", data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Creates a specification target for the selected categories. Every specification filter must match; selecting multiple values inside one filter matches any selected value. Use GET /api/website-images/specifications first to load each selected category's specifications and available values.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Black large products\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==\",\n  \"targetType\": \"specification\",\n  \"categoryIds\": [\"{{categoryId}}\"],\n  \"specificationFilters\": [\n    {\n      \"specificationName\": \"Color\",\n      \"values\": [\"Black\"]\n    },\n    {\n      \"specificationName\": \"Size\",\n      \"values\": [\"Large\", \"XL\"]\n    }\n  ],\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Specifications For Selected Categories",
+          "request": {
+            "method": "GET",
+            "description": "Returns every selected category with its configured specifications and the available values collected from products in that category. categoryIds accepts repeated query parameters or a comma-separated list.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images/specifications?categoryIds={{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images", "specifications"],
+              "query": [
+                {
+                  "key": "categoryIds",
+                  "value": "{{categoryId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Get Website Images",
           "request": {
             "method": "GET",
@@ -2134,7 +2195,7 @@
           "name": "Get Active Website Images With Products",
           "request": {
             "method": "GET",
-            "description": "Returns active image targets with imageUrl and a resolvedProducts array. The large embedded imageBase64 value is omitted from this combined response.",
+            "description": "Returns active image targets with imageUrl and a resolvedProducts array. specification targets resolve products within their selected categories that match every selected specification filter. The large embedded imageBase64 value is omitted from this combined response.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/website-images/active-with-products",
