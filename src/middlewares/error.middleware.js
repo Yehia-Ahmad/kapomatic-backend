@@ -19,7 +19,12 @@ const errorHandler = (err, req, res, next) => {
       .join(", ");
   }
 
-  res.status(statusCode).json({ message });
+  const responseData =
+    err.responseData && typeof err.responseData === "object"
+      ? err.responseData
+      : {};
+
+  res.status(statusCode).json({ message, ...responseData });
 };
 
 module.exports = errorHandler;

@@ -484,7 +484,13 @@ const buildQuantityByProductId = (items) => {
   return quantityByProductId;
 };
 
-const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) => {
+const applyInventoryForInvoiceChange = async ({
+  currentItems,
+  nextItems,
+  res,
+  allowInsufficientInventory = false,
+  inventoryAdjustmentsByProductId = new Map(),
+}) => {
   const currentQuantityByProductId = buildQuantityByProductId(currentItems);
   const nextQuantityByProductId = buildQuantityByProductId(nextItems);
   const allProductIds = [...new Set([
@@ -507,6 +513,8 @@ const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) 
     });
   }
 
+  const shortages = [];
+
   for (const [productId, nextQuantity] of nextQuantityByProductId.entries()) {
     const product = productsById.get(productId);
     if (!product) {
@@ -517,10 +525,30 @@ const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) 
     const currentQuantity = Number(currentQuantityByProductId.get(productId) || 0);
     const availableQuantity = Number(product.inventoryCount || 0) + currentQuantity;
     if (availableQuantity < nextQuantity) {
-      res.status(400);
-      throw new Error(`المخزون غير كافٍ للمنتج ${product.name}`);
+      shortages.push({
+        productId,
+        productName: product.name,
+        requestedQuantity: nextQuantity,
+        availableQuantity,
+        missingQuantity: nextQuantity - availableQuantity,
+      });
     }
   }
+
+  if (shortages.length > 0 && !allowInsufficientInventory) {
+    const error = new Error("الكمية المطلوبة غير متوفرة بالكامل في المخزون");
+    error.statusCode = 409;
+    error.responseData = {
+      code: "INSUFFICIENT_INVENTORY",
+      requiresConfirmation: true,
+      shortages,
+    };
+    throw error;
+  }
+
+  const autoRestockedByProductId = new Map(
+    shortages.map((shortage) => [shortage.productId, shortage.missingQuantity])
+  );
 
   for (const item of nextItems) {
     const productId = item.productId?.toString();
@@ -546,8 +574,15 @@ const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) 
       const originalState = originalStates.get(productId);
       const currentQuantity = Number(currentQuantityByProductId.get(productId) || 0);
       const nextQuantity = Number(nextQuantityByProductId.get(productId) || 0);
+      const autoRestockedQuantity = Number(autoRestockedByProductId.get(productId) || 0);
+      const inventoryAdjustment = Number(inventoryAdjustmentsByProductId.get(productId) || 0);
 
-      product.inventoryCount = originalState.inventoryCount + currentQuantity - nextQuantity;
+      product.inventoryCount =
+        originalState.inventoryCount +
+        currentQuantity -
+        nextQuantity +
+        autoRestockedQuantity +
+        inventoryAdjustment;
       product.soldItemCount = Math.max(
         0,
         originalState.soldItemCount - currentQuantity + nextQuantity
@@ -573,6 +608,7 @@ const applyInventoryForInvoiceChange = async ({ currentItems, nextItems, res }) 
     throw error;
   }
 
+  productsById.autoRestockedByProductId = autoRestockedByProductId;
   return productsById;
 };
 
@@ -629,6 +665,7 @@ const createSellingInvoice = async ({ body, res, options = {} }) => {
     currentItems: [],
     nextItems: items,
     res,
+    allowInsufficientInventory: body.confirmInsufficientInventory === true,
   });
   const persistedItems = buildPersistedItems(items, productsById);
   const invoiceTotals = buildInvoiceTotals(persistedItems, invoicePricing);
@@ -653,6 +690,11 @@ const createSellingInvoice = async ({ body, res, options = {} }) => {
         currentItems: items,
         nextItems: [],
         res,
+        inventoryAdjustmentsByProductId: new Map(
+          [...productsById.autoRestockedByProductId.entries()].map(
+            ([productId, quantity]) => [productId, -quantity]
+          )
+        ),
       });
     } catch (_rollbackError) {
       // Best-effort rollback only; surface the create failure.

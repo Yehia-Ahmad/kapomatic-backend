@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Cart checkout creates selling invoices from customer, shipping location, and products payloads. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Selling creation returns HTTP 409 with shortage details when inventory is insufficient and supports confirmInsufficientInventory to auto-restock the missing quantity and complete the full sale. Cart checkout creates selling invoices from customer, shipping location, and products payloads. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
   },
   "item": [
     {
@@ -1857,9 +1857,64 @@
                 "type": "text/javascript",
                 "exec": [
                   "const data = pm.response.json();",
-                  "pm.test(\"Created selling invoice includes discount and shipping fields\", function () {",
-                  "  pm.expect(data).to.have.property(\"discountAmount\");",
-                  "  pm.expect(data).to.have.property(\"shippingFees\");",
+                  "if (pm.response.code === 409) {",
+                  "  pm.test(\"Insufficient inventory response includes confirmation details\", function () {",
+                  "    pm.expect(data.code).to.eql(\"INSUFFICIENT_INVENTORY\");",
+                  "    pm.expect(data.requiresConfirmation).to.eql(true);",
+                  "    pm.expect(data.shortages).to.be.an(\"array\").that.is.not.empty;",
+                  "  });",
+                  "} else {",
+                  "  pm.test(\"Created selling invoice includes discount and shipping fields\", function () {",
+                  "    pm.expect(pm.response.code).to.eql(201);",
+                  "    pm.expect(data).to.have.property(\"discountAmount\");",
+                  "    pm.expect(data).to.have.property(\"shippingFees\");",
+                  "  });",
+                  "  if (data && (data._id || data.invoiceId)) {",
+                  "    pm.collectionVariables.set(\"sellingId\", data._id || data.invoiceId);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Creates a selling invoice with one or more items plus optional discountAmount and shippingFees. When stock is insufficient, the API returns HTTP 409 with code INSUFFICIENT_INVENTORY, requiresConfirmation=true, and a shortages array containing requestedQuantity, availableQuantity, and missingQuantity. After user confirmation, repeat the request with confirmInsufficientInventory=true to auto-restock the missing quantity and complete the full sale. If no customer exists with the submitted customerName and customerPhone, the backend creates the customer. If the phone already exists with a different name, the customer name is updated.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-12\",\n  \"discountAmount\": 10,\n  \"shippingFees\": 25,\n  \"confirmInsufficientInventory\": false,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"price\": 15\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sellings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sellings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Selling Invoice - Confirm Insufficient Inventory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Confirmed selling invoice is created\", function () {",
+                  "  pm.expect(pm.response.code).to.eql(201);",
+                  "  pm.expect(data).to.have.property(\"items\");",
                   "});",
                   "if (data && (data._id || data.invoiceId)) {",
                   "  pm.collectionVariables.set(\"sellingId\", data._id || data.invoiceId);",
@@ -1870,7 +1925,7 @@
           ],
           "request": {
             "method": "POST",
-            "description": "Creates a selling invoice with one or more items plus optional discountAmount and shippingFees. If no customer exists with the submitted customerName and customerPhone, the backend creates the customer. If the phone already exists with a different name, the customer name is updated.",
+            "description": "Retries selling creation after the user accepts the insufficient-inventory warning. The backend automatically adds each missing quantity, sells the full requested quantity, and leaves affected inventory at zero.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1879,7 +1934,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-12\",\n  \"discountAmount\": 10,\n  \"shippingFees\": 25,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"price\": 15\n    }\n  ]\n}"
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"2026-03-12\",\n  \"discountAmount\": 10,\n  \"shippingFees\": 25,\n  \"confirmInsufficientInventory\": true,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 10,\n      \"price\": 15\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/sellings",
