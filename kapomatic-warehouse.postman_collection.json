@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Selling creation returns HTTP 409 with shortage details when inventory is insufficient and supports confirmInsufficientInventory to auto-restock the missing quantity and complete the full sale. Cart checkout creates selling invoices from customer, shipping location, and products payloads. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Cash and credit refunds are created only through POST /api/returns using returnType and invoiceId. Invoice DELETE endpoints remove only the invoice row and do not change inventory. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Selling creation returns HTTP 409 with shortage details when inventory is insufficient and supports confirmInsufficientInventory to auto-restock the missing quantity and complete the full sale. Cart checkout creates selling invoices from customer, shipping location, and products payloads. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
   },
   "item": [
     {
@@ -1591,7 +1591,7 @@
           "response": []
         },
         {
-          "name": "Add Credit Sale Refund",
+          "name": "Create Credit Return",
           "event": [
             {
               "listen": "test",
@@ -1618,7 +1618,7 @@
           ],
           "request": {
             "method": "POST",
-            "description": "Adds a partial refund to a credit-sale invoice. For a full invoice return, replace items with { \"refundAll\": true }. When a partial refund creates overpayment, the backend reallocates it to the customer's other open credit invoices first, then returns any leftover cash in returnedPaidAmount and stores the transferred amount in reallocatedPaidAmount. When the invoice is fully returned, the backend returns the invoice paidAmount, stores it in returnedPaidAmount, and changes status to Reactionary.",
+            "description": "Creates a credit return through the centralized returns endpoint. For a full invoice return, replace items with { \"refundAll\": true }. When a partial refund creates overpayment, the backend reallocates it to the customer's other open credit invoices first, then returns any leftover cash in returnedPaidAmount and stores the transferred amount in reallocatedPaidAmount. When the invoice is fully returned, the backend returns the invoice paidAmount, stores it in returnedPaidAmount, and changes status to Reactionary.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1627,18 +1627,16 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refundDate\": \"{{creditRefundDate}}\",\n  \"note\": \"Customer returned one unit\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ]\n}"
+              "raw": "{\n  \"returnType\": \"credit\",\n  \"invoiceId\": \"{{creditSaleId}}\",\n  \"refundDate\": \"{{creditRefundDate}}\",\n  \"note\": \"Customer returned one unit\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ]\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/credit-sales/{{creditSaleId}}/refunds",
+              "raw": "{{baseUrl}}/api/returns",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "credit-sales",
-                "{{creditSaleId}}",
-                "refunds"
+                "returns"
               ]
             }
           },
@@ -1699,7 +1697,7 @@
           "name": "Delete Credit Sale",
           "request": {
             "method": "DELETE",
-            "description": "Deletes a credit-sale invoice and restores its item quantities back to inventory.",
+            "description": "Deletes only the credit-sale invoice row. Inventory changes must be performed through POST /api/returns.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/credit-sales/{{creditSaleId}}",
@@ -1998,10 +1996,54 @@
           "response": []
         },
         {
+          "name": "Create Cash Return",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Cash return is created\", function () {",
+                  "  pm.expect(pm.response.code).to.eql(201);",
+                  "  pm.expect(data.success).to.eql(true);",
+                  "  pm.expect(data.data).to.have.property(\"returnLog\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Creates a cash return through the centralized returns endpoint and restores only the returned quantities to inventory.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"returnType\": \"cash\",\n  \"invoiceId\": \"{{sellingId}}\",\n  \"returnDate\": \"2026-06-25\",\n  \"note\": \"Customer returned one unit\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1,\n      \"returnReason\": \"Damaged item\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/returns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "returns"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Delete Selling Invoice",
           "request": {
             "method": "DELETE",
-            "description": "Deletes a selling invoice and restores its item quantities back to inventory.",
+            "description": "Deletes only the selling invoice row. Inventory changes must be performed through POST /api/returns.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",

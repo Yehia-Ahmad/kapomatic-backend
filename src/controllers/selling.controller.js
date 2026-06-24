@@ -1049,15 +1049,6 @@ const deleteSelling = asyncHandler(async (req, res) => {
     throw new Error("سجل البيع غير موجود");
   }
 
-  await applyInventoryForInvoiceChange({
-    currentItems: getSellingItems(selling).map((item) => ({
-      ...toSellingItemInput(item),
-      quantity: Math.max(0, Number(item.quantity) - refundedForItem(selling, item._id)),
-    })),
-    nextItems: [],
-    res,
-  });
-
   await selling.deleteOne();
   res.json({ message: "Selling invoice deleted successfully" });
 });

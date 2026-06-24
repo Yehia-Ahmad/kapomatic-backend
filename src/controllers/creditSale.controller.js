@@ -1533,9 +1533,10 @@ const addCreditSaleRefund = asyncHandler(async (req, res) => {
   }
 
   const refundSelections = normalizeCreditSaleRefundItems(creditSale, req.body, res);
+  const rawRefundDate = getFirstDefined(req.body.returnDate, req.body.refundDate);
   const refundDate =
-    req.body.refundDate !== undefined
-      ? normalizeRequiredDate(req.body.refundDate, "تاريخ المرتجع", res)
+    rawRefundDate !== undefined
+      ? normalizeRequiredDate(rawRefundDate, "تاريخ المرتجع", res)
       : new Date();
   const refundNote = normalizeOptionalString(
     getFirstDefined(req.body.note, req.body.reason),
@@ -1704,12 +1705,6 @@ const deleteCreditSale = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("سجل البيع الآجل غير موجود");
   }
-
-  await applyInventoryForInvoiceChange({
-    currentItems: getCreditSaleItemInputs(creditSale),
-    nextItems: [],
-    res,
-  });
 
   await creditSale.deleteOne();
   res.json({ message: "Credit sale invoice deleted successfully" });
