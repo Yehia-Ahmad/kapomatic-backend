@@ -6,6 +6,7 @@ const Product = require("../models/product.model");
 const Selling = require("../models/selling.model");
 const asyncHandler = require("../utils/asyncHandler");
 const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
+const { calculatePriceAfterDiscount } = require("../utils/productPricing");
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -110,6 +111,21 @@ const validateSpecifications = (specifications, res) => {
   return specifications;
 };
 
+const normalizeDiscountPercentage = (value, res) => {
+  const discountPercentage = Number(value);
+
+  if (
+    !Number.isFinite(discountPercentage) ||
+    discountPercentage < 0 ||
+    discountPercentage > 100
+  ) {
+    res.status(400);
+    throw new Error("يجب أن تكون نسبة الخصم رقمًا من 0 إلى 100");
+  }
+
+  return discountPercentage;
+};
+
 const cloneSpecifications = (specifications = []) =>
   specifications.map((specification) => JSON.parse(JSON.stringify(specification)));
 
@@ -199,6 +215,11 @@ const buildProductProfitReportRow = (product) => ({
   categoryId: product.category?._id ?? null,
   categoryName: product.category?.name ?? "Uncategorized",
   purchasePrice: roundMoney(Number(product.purchasePrice ?? product.wholesalePrice ?? 0)),
+  discountPercentage: Number(product.discountPercentage || 0),
+  priceAfterDiscount: calculatePriceAfterDiscount(
+    product.retailPrice,
+    product.discountPercentage
+  ),
   totalProfit: 0,
   profitValue: 0,
   lastSellingDate: null,
@@ -484,6 +505,8 @@ const exportProductsExcel = asyncHandler(async (req, res) => {
     { header: "سعر الشراء", key: "purchasePrice", width: 16, style: { numFmt: "0.00" } },
     { header: "سعر الجملة", key: "wholesalePrice", width: 16, style: { numFmt: "0.00" } },
     { header: "سعر التجزئة", key: "retailPrice", width: 16, style: { numFmt: "0.00" } },
+    { header: "نسبة الخصم", key: "discountPercentage", width: 16, style: { numFmt: "0.00" } },
+    { header: "السعر بعد الخصم", key: "priceAfterDiscount", width: 18, style: { numFmt: "0.00" } },
     { header: "عدد القطع المباعة", key: "soldItemCount", width: 18, style: { numFmt: "0" } },
     { header: "عدد المخزون", key: "inventoryCount", width: 16, style: { numFmt: "0" } },
   ];
@@ -499,6 +522,11 @@ const exportProductsExcel = asyncHandler(async (req, res) => {
       purchasePrice: Number(product.purchasePrice ?? product.wholesalePrice ?? 0),
       wholesalePrice: Number(product.wholesalePrice ?? 0),
       retailPrice: Number(product.retailPrice ?? 0),
+      discountPercentage: Number(product.discountPercentage ?? 0),
+      priceAfterDiscount: calculatePriceAfterDiscount(
+        product.retailPrice,
+        product.discountPercentage
+      ),
       soldItemCount: Number(product.soldItemCount ?? 0),
       inventoryCount: Number(product.inventoryCount ?? 0),
     });
@@ -535,6 +563,8 @@ const createProduct = asyncHandler(async (req, res) => {
     retailPrice,
     soldItemCount,
   } = req.body;
+  const discountPercentageInput =
+    req.body.discountPercentage ?? req.body.discount_percentage;
 
   const category = await Category.findById(categoryId);
   if (!category) {
@@ -605,6 +635,10 @@ const createProduct = asyncHandler(async (req, res) => {
     wholesalePrice,
     purchasePrice: normalizedPurchasePrice,
     retailPrice,
+    discountPercentage:
+      discountPercentageInput !== undefined
+        ? normalizeDiscountPercentage(discountPercentageInput, res)
+        : 0,
     specifications: cloneSpecifications(
       requestSpecifications !== undefined ? requestSpecifications : category.specifications
     ),
@@ -764,6 +798,11 @@ const updateProduct = asyncHandler(async (req, res) => {
   if (req.body.wholesalePrice !== undefined) product.wholesalePrice = req.body.wholesalePrice;
   if (req.body.purchasePrice !== undefined) product.purchasePrice = req.body.purchasePrice;
   if (req.body.retailPrice !== undefined) product.retailPrice = req.body.retailPrice;
+  const discountPercentageInput =
+    req.body.discountPercentage ?? req.body.discount_percentage;
+  if (discountPercentageInput !== undefined) {
+    product.discountPercentage = normalizeDiscountPercentage(discountPercentageInput, res);
+  }
   if (requestSpecifications !== undefined) {
     product.specifications = cloneSpecifications(requestSpecifications);
   } else if (selectedCategory) {

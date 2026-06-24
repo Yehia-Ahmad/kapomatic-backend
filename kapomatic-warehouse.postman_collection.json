@@ -1007,6 +1007,7 @@
           "name": "Get Products (Required categoryId)",
           "request": {
             "method": "GET",
+            "description": "Returns paginated products with discountPercentage and the calculated priceAfterDiscount.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/products?categoryId={{categoryId}}",
@@ -1031,6 +1032,7 @@
           "name": "Get Products By Category",
           "request": {
             "method": "GET",
+            "description": "Returns products with discountPercentage and the calculated priceAfterDiscount.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/products?categoryId={{categoryId}}",
@@ -1055,7 +1057,7 @@
           "name": "Search By Product Name Or Code",
           "request": {
             "method": "GET",
-            "description": "Use q for one term across both product name and code, or send name and/or code explicitly.",
+            "description": "Use q for one term across both product name and code, or send name and/or code explicitly. Every product includes discountPercentage and priceAfterDiscount.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/products/search?q={{productSearchTerm}}&name={{productSearchName}}&code={{productSearchCode}}",
@@ -1099,7 +1101,11 @@
                   "}",
                   "if (data && data.inventoryCount !== undefined) {",
                   "  pm.collectionVariables.set(\"productInventoryCount\", String(data.inventoryCount));",
-                  "}"
+                  "}",
+                  "pm.test(\"Product includes discount pricing\", function () {",
+                  "  pm.expect(data).to.have.property(\"discountPercentage\");",
+                  "  pm.expect(data).to.have.property(\"priceAfterDiscount\");",
+                  "});"
                 ]
               }
             }
@@ -1272,7 +1278,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"code\": \"WM-001\",\n  \"inventoryCount\": 100,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"purchasePrice\": 7.25,\n  \"retailPrice\": 15,\n  \"soldItemCount\": 10,\n  \"specifications\": [\n    {\n      \"name\": \"Color\",\n      \"value\": \"Black\"\n    },\n    {\n      \"name\": \"Size\",\n      \"value\": \"Medium\"\n    }\n  ],\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse\",\n  \"code\": \"WM-001\",\n  \"inventoryCount\": 100,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 8.5,\n  \"purchasePrice\": 7.25,\n  \"retailPrice\": 15,\n  \"discountPercentage\": 10,\n  \"soldItemCount\": 10,\n  \"specifications\": [\n    {\n      \"name\": \"Color\",\n      \"value\": \"Black\"\n    },\n    {\n      \"name\": \"Size\",\n      \"value\": \"Medium\"\n    }\n  ],\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products",
@@ -1291,7 +1297,7 @@
           "name": "Update Product",
           "request": {
             "method": "PUT",
-            "description": "Set editProduct to true when editing product details without applying newInventory. If both inventoryCount and newInventory are sent, newInventory is added only when editProduct is not true and inventoryCount matches the product's current stored inventoryCount. If they differ, newInventory is ignored.",
+            "description": "Updates product details including discountPercentage (0-100). The response includes priceAfterDiscount. Set editProduct to true when editing product details without applying newInventory. If both inventoryCount and newInventory are sent, newInventory is added only when editProduct is not true and inventoryCount matches the product's current stored inventoryCount. If they differ, newInventory is ignored.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1300,7 +1306,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"editProduct\": true,\n  \"inventoryCount\": {{productInventoryCount}},\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"purchasePrice\": 7.5,\n  \"retailPrice\": 17,\n  \"soldItemCount\": 20,\n  \"specifications\": [\n    {\n      \"name\": \"Color\",\n      \"value\": \"Black\"\n    },\n    {\n      \"name\": \"Warranty\",\n      \"value\": \"1 year\"\n    }\n  ],\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
+              "raw": "{\n  \"name\": \"Wireless Mouse Pro\",\n  \"code\": \"WM-001-PRO\",\n  \"editProduct\": true,\n  \"inventoryCount\": {{productInventoryCount}},\n  \"newInventory\": 15,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 9,\n  \"purchasePrice\": 7.5,\n  \"retailPrice\": 17,\n  \"discountPercentage\": 15,\n  \"soldItemCount\": 20,\n  \"specifications\": [\n    {\n      \"name\": \"Color\",\n      \"value\": \"Black\"\n    },\n    {\n      \"name\": \"Warranty\",\n      \"value\": \"1 year\"\n    }\n  ],\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/products/{{productId}}",

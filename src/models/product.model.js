@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const isBase64Image = require("../utils/isBase64Image");
+const { calculatePriceAfterDiscount } = require("../utils/productPricing");
 
 const productSchema = new mongoose.Schema(
   {
@@ -74,6 +75,12 @@ const productSchema = new mongoose.Schema(
         message: "يجب أن يكون سعر التجزئة أكبر من أو يساوي سعر الجملة",
       },
     },
+    discountPercentage: {
+      type: Number,
+      default: 0,
+      min: [0, "نسبة الخصم لا يمكن أن تكون أقل من صفر"],
+      max: [100, "نسبة الخصم لا يمكن أن تكون أكبر من 100"],
+    },
     soldItemCount: {
       type: Number,
       default: 0,
@@ -90,5 +97,17 @@ const productSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+productSchema.virtual("priceAfterDiscount").get(function getPriceAfterDiscount() {
+  return calculatePriceAfterDiscount(this.retailPrice, this.discountPercentage);
+});
+
+productSchema.set("toJSON", {
+  virtuals: true,
+  transform: (_document, returnedObject) => {
+    delete returnedObject.id;
+    return returnedObject;
+  },
+});
 
 module.exports = mongoose.model("Product", productSchema);

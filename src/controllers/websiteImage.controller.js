@@ -4,6 +4,7 @@ const Product = require("../models/product.model");
 const WebsiteImage = require("../models/websiteImage.model");
 const asyncHandler = require("../utils/asyncHandler");
 const isBase64Image = require("../utils/isBase64Image");
+const { withProductPriceAfterDiscount } = require("../utils/productPricing");
 
 const TARGET_TYPES = new Set(["category", "product", "both", "price", "specification"]);
 
@@ -12,7 +13,7 @@ const populateWebsiteImages = (query) =>
     .populate("categoryIds", "name image specifications")
     .populate(
       "productIds",
-      "name code image category retailPrice wholesalePrice purchasePrice inventoryCount specifications"
+      "name code image category retailPrice wholesalePrice purchasePrice discountPercentage inventoryCount specifications"
     );
 
 // The combined storefront response already includes full resolved products.
@@ -20,7 +21,17 @@ const populateWebsiteImages = (query) =>
 const populateCompactWebsiteImageTargets = (query) =>
   query
     .populate("categoryIds", "name")
-    .populate("productIds", "name code category retailPrice");
+    .populate("productIds", "name code category retailPrice discountPercentage");
+
+const withPricingForWebsiteImage = (websiteImage) => {
+  const imageObject =
+    typeof websiteImage.toObject === "function" ? websiteImage.toObject() : websiteImage;
+
+  return {
+    ...imageObject,
+    productIds: (imageObject.productIds || []).map(withProductPriceAfterDiscount),
+  };
+};
 
 const ensureObjectId = (value, fieldLabel, res) => {
   if (typeof value !== "string" || !mongoose.Types.ObjectId.isValid(value)) {
@@ -391,7 +402,10 @@ const resolveWebsiteImageProducts = async (websiteImage) => {
 
   return [
     ...new Map(
-      products.map((product) => [product._id.toString(), product])
+      products.map((product) => {
+        const pricedProduct = withProductPriceAfterDiscount(product);
+        return [product._id.toString(), pricedProduct];
+      })
     ).values(),
   ];
 };
@@ -457,6 +471,9 @@ const toWebsiteImageWithAssetUrl = (websiteImage, resolvedProducts) => {
 
   return {
     ...imageWithoutEmbeddedAsset,
+    productIds: (imageWithoutEmbeddedAsset.productIds || []).map(
+      withProductPriceAfterDiscount
+    ),
     imageUrl: `/api/website-images/${websiteImage._id}/image`,
     resolvedProducts,
   };
@@ -470,24 +487,24 @@ const createWebsiteImage = asyncHandler(async (req, res) => {
   await websiteImage.populate("categoryIds", "name image specifications");
   await websiteImage.populate(
     "productIds",
-    "name code image category retailPrice wholesalePrice purchasePrice inventoryCount specifications"
+    "name code image category retailPrice wholesalePrice purchasePrice discountPercentage inventoryCount specifications"
   );
 
-  res.status(201).json(websiteImage);
+  res.status(201).json(withPricingForWebsiteImage(websiteImage));
 });
 
 const getWebsiteImages = asyncHandler(async (req, res) => {
   const websiteImages = await populateWebsiteImages(
     WebsiteImage.find().sort({ createdAt: -1 })
   );
-  res.json(websiteImages);
+  res.json(websiteImages.map(withPricingForWebsiteImage));
 });
 
 const getActiveWebsiteImages = asyncHandler(async (req, res) => {
   const websiteImages = await populateWebsiteImages(
     WebsiteImage.find({ isActive: true }).sort({ createdAt: -1 })
   );
-  res.json(websiteImages);
+  res.json(websiteImages.map(withPricingForWebsiteImage));
 });
 
 const getActiveWebsiteImagesWithProducts = asyncHandler(async (req, res) => {
@@ -541,7 +558,7 @@ const getWebsiteImageById = asyncHandler(async (req, res) => {
     throw new Error("صورة الموقع غير موجودة");
   }
 
-  res.json(websiteImage);
+  res.json(withPricingForWebsiteImage(websiteImage));
 });
 
 const getWebsiteImageProducts = asyncHandler(async (req, res) => {
@@ -572,10 +589,10 @@ const updateWebsiteImage = asyncHandler(async (req, res) => {
   await websiteImage.populate("categoryIds", "name image specifications");
   await websiteImage.populate(
     "productIds",
-    "name code image category retailPrice wholesalePrice purchasePrice inventoryCount specifications"
+    "name code image category retailPrice wholesalePrice purchasePrice discountPercentage inventoryCount specifications"
   );
 
-  res.json(websiteImage);
+  res.json(withPricingForWebsiteImage(websiteImage));
 });
 
 const deleteWebsiteImage = asyncHandler(async (req, res) => {

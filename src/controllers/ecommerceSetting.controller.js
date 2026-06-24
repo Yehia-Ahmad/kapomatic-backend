@@ -5,9 +5,19 @@ const GeneralSetting = require("../models/generalSetting.model");
 const Product = require("../models/product.model");
 const ShippingSetting = require("../models/shippingSetting.model");
 const asyncHandler = require("../utils/asyncHandler");
+const { withProductPriceAfterDiscount } = require("../utils/productPricing");
 
 const ECOMMERCE_PRODUCT_FIELDS =
-  "name code image retailPrice wholesalePrice inventoryCount category specifications";
+  "name code image retailPrice wholesalePrice discountPercentage inventoryCount category specifications";
+
+const withPricingForSetting = (setting) => ({
+  ...setting,
+  selectedProducts: (setting.selectedProducts || []).map(withProductPriceAfterDiscount),
+  filters: (setting.filters || []).map((filter) => ({
+    ...filter,
+    products: (filter.products || []).map(withProductPriceAfterDiscount),
+  })),
+});
 
 const populateSetting = (query) =>
   query
@@ -407,7 +417,9 @@ const buildEcommerceSettingCategories = async (activeOnly = false) => {
     .map((category) => {
       const categoryId = category._id.toString();
       const setting = settingsByCategory.get(categoryId);
-      const categoryProducts = productsByCategory.get(categoryId) || [];
+      const categoryProducts = (productsByCategory.get(categoryId) || []).map(
+        withProductPriceAfterDiscount
+      );
       const specificationFilters = buildCategorySpecificationFilters(
         category.specifications || [],
         categoryProducts
@@ -512,7 +524,7 @@ const getProductsByActiveEcommerceCategory = asyncHandler(async (req, res) => {
       specifications: specificationFilters,
       filters: specificationFilters,
     },
-    products: filteredProducts,
+    products: filteredProducts.map(withProductPriceAfterDiscount),
     setting,
   });
 });
@@ -560,14 +572,16 @@ const getProductByActiveEcommerceCategory = asyncHandler(async (req, res) => {
       specifications: specificationFilters,
       filters: specificationFilters,
     },
-    product,
+    product: withProductPriceAfterDiscount(product),
     setting,
   });
 });
 
 const getEcommerceSettings = asyncHandler(async (req, res) => {
-  const settings = await populateSetting(EcommerceSetting.find().sort({ createdAt: 1 }));
-  res.json(settings);
+  const settings = await populateSetting(
+    EcommerceSetting.find().sort({ createdAt: 1 })
+  ).lean();
+  res.json(settings.map(withPricingForSetting));
 });
 
 const getStorefrontSettings = asyncHandler(async (req, res) => {
@@ -575,10 +589,13 @@ const getStorefrontSettings = asyncHandler(async (req, res) => {
     EcommerceSetting.find({ showOnWebsite: true }).sort({ createdAt: 1 })
   ).lean();
 
-  const visibleSettings = settings.map((setting) => ({
-    ...setting,
-    filters: (setting.filters || []).filter((filter) => filter.isVisible),
-  }));
+  const visibleSettings = settings.map((setting) => {
+    const pricedSetting = withPricingForSetting(setting);
+    return {
+      ...pricedSetting,
+      filters: pricedSetting.filters.filter((filter) => filter.isVisible),
+    };
+  });
 
   res.json(visibleSettings);
 });
@@ -782,14 +799,16 @@ const updateWebsiteCurrency = asyncHandler(async (req, res) => {
 
 const getEcommerceSettingByCategory = asyncHandler(async (req, res) => {
   const categoryId = ensureObjectId(req.params.categoryId, "معرّف الفئة", res);
-  const setting = await populateSetting(EcommerceSetting.findOne({ category: categoryId }));
+  const setting = await populateSetting(
+    EcommerceSetting.findOne({ category: categoryId })
+  ).lean();
 
   if (!setting) {
     res.status(404);
     throw new Error("إعدادات الفئة غير موجودة");
   }
 
-  res.json(setting);
+  res.json(withPricingForSetting(setting));
 });
 
 const upsertEcommerceSetting = asyncHandler(async (req, res) => {
@@ -822,7 +841,7 @@ const upsertEcommerceSetting = asyncHandler(async (req, res) => {
   );
 
   await populateSettingDocument(setting);
-  res.json(setting);
+  res.json(withPricingForSetting(setting.toObject()));
 });
 
 const resetEcommerceSetting = asyncHandler(async (req, res) => {
