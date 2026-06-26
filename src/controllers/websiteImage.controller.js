@@ -235,8 +235,6 @@ const getReferenceIds = (references = []) =>
   references.map((reference) => (reference?._id || reference).toString());
 
 const buildWebsiteImageInput = (body, res, current = null) => {
-  const targetType = normalizeTargetType(body.targetType ?? current?.targetType, res);
-  const targetTypeChanged = current && targetType !== current.targetType;
   const imageBase64 = body.imageBase64 ?? body.image ?? current?.imageBase64;
 
   if (typeof imageBase64 !== "string" || !isBase64Image(imageBase64)) {
@@ -249,6 +247,30 @@ const buildWebsiteImageInput = (body, res, current = null) => {
     throw new Error("عنوان صورة الموقع غير صالح");
   }
 
+  const viewOnly =
+    body.viewOnly !== undefined || body.isViewOnly !== undefined
+      ? normalizeBoolean(body.viewOnly ?? body.isViewOnly, "viewOnly", res)
+      : current?.viewOnly ?? false;
+
+  if (viewOnly) {
+    return {
+      title: body.title !== undefined ? body.title.trim() : current?.title || "",
+      imageBase64: imageBase64.trim(),
+      viewOnly,
+      targetType: undefined,
+      categoryIds: [],
+      productIds: [],
+      maxPrice: null,
+      specificationFilters: [],
+      isActive:
+        body.isActive !== undefined
+          ? normalizeBoolean(body.isActive, "isActive", res)
+          : current?.isActive ?? true,
+    };
+  }
+
+  const targetType = normalizeTargetType(body.targetType ?? current?.targetType, res);
+  const targetTypeChanged = current && targetType !== current.targetType;
   const categoryIds = normalizeObjectIdList(
     body.categoryIds !== undefined
       ? body.categoryIds
@@ -332,6 +354,7 @@ const buildWebsiteImageInput = (body, res, current = null) => {
   return {
     title: body.title !== undefined ? body.title.trim() : current?.title || "",
     imageBase64: imageBase64.trim(),
+    viewOnly,
     targetType,
     categoryIds,
     productIds,
@@ -366,6 +389,8 @@ const validateReferencesExist = async ({ categoryIds, productIds }, res) => {
 };
 
 const resolveWebsiteImageProducts = async (websiteImage) => {
+  if (websiteImage.viewOnly) return [];
+
   let productQuery;
 
   if (websiteImage.targetType === "product" || websiteImage.targetType === "both") {

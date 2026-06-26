@@ -2152,6 +2152,49 @@
           "response": []
         },
         {
+          "name": "Create View Only Website Image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"View only website image is created\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(data).to.have.property(\"_id\");",
+                  "  pm.expect(data.viewOnly).to.eql(true);",
+                  "  pm.expect(data.categoryIds).to.be.an(\"array\").that.is.empty;",
+                  "  pm.expect(data.productIds).to.be.an(\"array\").that.is.empty;",
+                  "  pm.expect(data.specificationFilters).to.be.an(\"array\").that.is.empty;",
+                  "});",
+                  "if (data && data._id) pm.collectionVariables.set(\"websiteImageId\", data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Creates a view-only website image. When viewOnly is true, the payload only needs imageBase64 or image; targeting fields are not required and are cleared by the backend.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Homepage banner\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==\",\n  \"viewOnly\": true,\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/website-images",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "website-images"]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Get Specifications For Selected Categories",
           "request": {
             "method": "GET",

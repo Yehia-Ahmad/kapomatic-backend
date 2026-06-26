@@ -392,8 +392,18 @@ Example price-targeted image:
 }
 ```
 
+Example view-only image:
+
+```json
+{
+  "imageBase64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
+  "viewOnly": true
+}
+```
+
 Targeting rules:
 
+- `viewOnly: true` creates a display-only website image. It only requires `imageBase64`/`image` and does not require `targetType`, categories, products, price, or specifications.
 - `category` requires at least one `categoryIds` entry and resolves no products.
 - `product` requires at least one `productIds` entry.
 - `both` requires at least one category and one product.

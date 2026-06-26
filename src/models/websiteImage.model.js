@@ -35,9 +35,18 @@ const websiteImageSchema = new mongoose.Schema(
         message: "يجب أن تكون صورة الموقع سلسلة base64 صالحة (خام أو بصيغة data URI)",
       },
     },
+    viewOnly: {
+      type: Boolean,
+      default: false,
+    },
     targetType: {
       type: String,
-      required: [true, "نوع استهداف صورة الموقع مطلوب"],
+      required: [
+        function requireTargetType() {
+          return !this.viewOnly;
+        },
+        "نوع استهداف صورة الموقع مطلوب",
+      ],
       enum: {
         values: ["category", "product", "both", "price", "specification"],
         message: "نوع الاستهداف يجب أن يكون category أو product أو both أو price أو specification",
