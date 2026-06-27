@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Cash and credit refunds are created only through POST /api/returns using returnType and invoiceId. Invoice DELETE endpoints remove only the invoice row and do not change inventory. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Selling creation returns HTTP 409 with shortage details when inventory is insufficient and supports confirmInsufficientInventory to auto-restock the missing quantity and complete the full sale. Cart checkout creates selling invoices from customer, shipping location, and products payloads. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Cash and credit refunds are created only through POST /api/returns using returnType and invoiceId. Cash full refunds delete the selling invoice; cash partial refunds hide refunded item quantities from selling invoice responses. Invoice DELETE endpoints remove only the invoice row and do not change inventory. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Selling creation returns HTTP 409 with shortage details when inventory is insufficient and supports confirmInsufficientInventory to auto-restock the missing quantity and complete the full sale. Cart checkout creates pending website orders from customer, shipping location, and products payloads. Confirming a website order creates the linked selling invoice; website orders can be listed by pending, accepted, and refunded status. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
   },
   "item": [
     {
@@ -201,8 +201,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/ecommerce-settings/home-page/categories",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "ecommerce-settings", "home-page", "categories"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "home-page",
+                "categories"
+              ]
             }
           },
           "response": []
@@ -239,8 +246,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/ecommerce-settings/home-page/categories",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "ecommerce-settings", "home-page", "categories"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "home-page",
+                "categories"
+              ]
             }
           },
           "response": []
@@ -1755,7 +1769,7 @@
           ],
           "request": {
             "method": "GET",
-            "description": "Returns selling invoices. Each invoice item includes the productCode field, and each invoice includes discountAmount and shippingFees.",
+            "description": "Returns paginated selling invoices. Fully refunded invoices are excluded. Partially refunded invoices include only remaining, non-refunded item quantities. Each invoice item includes the productCode field, and each invoice includes discountAmount and shippingFees.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sellings",
@@ -1836,7 +1850,7 @@
           ],
           "request": {
             "method": "GET",
-            "description": "Returns one selling invoice by invoice document ID, including discountAmount and shippingFees.",
+            "description": "Returns one selling invoice by invoice document ID, including discountAmount and shippingFees. Fully refunded invoices are treated as deleted/not found, and partially refunded invoices include only remaining, non-refunded item quantities.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sellings/{{sellingId}}",
@@ -2014,6 +2028,17 @@
                   "  pm.expect(pm.response.code).to.eql(201);",
                   "  pm.expect(data.success).to.eql(true);",
                   "  pm.expect(data.data).to.have.property(\"returnLog\");",
+                  "});",
+                  "pm.test(\"Cash return response matches partial or full refund behavior\", function () {",
+                  "  const payload = data.data || {};",
+                  "  const isFullRefund = Object.prototype.hasOwnProperty.call(payload, \"deletedInvoiceId\");",
+                  "  if (isFullRefund) {",
+                  "    pm.expect(payload).to.have.property(\"deletedInvoiceId\");",
+                  "    pm.expect(payload).to.not.have.property(\"invoice\");",
+                  "  } else {",
+                  "    pm.expect(payload).to.have.property(\"invoice\");",
+                  "    pm.expect(payload.invoice).to.have.property(\"items\").that.is.an(\"array\");",
+                  "  }",
                   "});"
                 ]
               }
@@ -2021,7 +2046,7 @@
           ],
           "request": {
             "method": "POST",
-            "description": "Creates a cash return through the centralized returns endpoint and restores only the returned quantities to inventory.",
+            "description": "Creates a cash return through the centralized returns endpoint and restores only the returned quantities to inventory. A partial return keeps the selling invoice and returns only remaining, non-refunded invoice items. A full return deletes the selling invoice and returns deletedInvoiceId with the returnLog.",
             "header": [
               {
                 "key": "Content-Type",
@@ -2104,8 +2129,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/website-images",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images"
+              ]
             }
           },
           "response": []
@@ -2145,8 +2175,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/website-images",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images"
+              ]
             }
           },
           "response": []
@@ -2188,8 +2223,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/website-images",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images"
+              ]
             }
           },
           "response": []
@@ -2202,8 +2242,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/website-images/specifications?categoryIds={{categoryId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images", "specifications"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images",
+                "specifications"
+              ],
               "query": [
                 {
                   "key": "categoryIds",
@@ -2221,8 +2267,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/website-images",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images"
+              ]
             }
           },
           "response": []
@@ -2234,8 +2285,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/website-images/active",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images", "active"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images",
+                "active"
+              ]
             }
           },
           "response": []
@@ -2248,8 +2305,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/website-images/active-with-products",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images", "active-with-products"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images",
+                "active-with-products"
+              ]
             }
           },
           "response": []
@@ -2261,8 +2324,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images", "{{websiteImageId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images",
+                "{{websiteImageId}}"
+              ]
             }
           },
           "response": []
@@ -2275,8 +2344,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}/image",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images", "{{websiteImageId}}", "image"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images",
+                "{{websiteImageId}}",
+                "image"
+              ]
             }
           },
           "response": []
@@ -2289,8 +2365,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}/products",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images", "{{websiteImageId}}", "products"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images",
+                "{{websiteImageId}}",
+                "products"
+              ]
             }
           },
           "response": []
@@ -2312,8 +2395,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images", "{{websiteImageId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images",
+                "{{websiteImageId}}"
+              ]
             }
           },
           "response": []
@@ -2325,8 +2414,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/website-images/{{websiteImageId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "website-images", "{{websiteImageId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-images",
+                "{{websiteImageId}}"
+              ]
             }
           },
           "response": []
@@ -2345,16 +2440,18 @@
                 "type": "text/javascript",
                 "exec": [
                   "const data = pm.response.json();",
-                  "pm.test(\"Checkout creates a selling invoice\", function () {",
+                  "pm.test(\"Checkout creates a pending website order\", function () {",
                   "  pm.expect(data).to.have.property(\"_id\");",
-                  "  pm.expect(data).to.have.property(\"invoiceId\");",
+                  "  pm.expect(data).to.have.property(\"orderId\");",
+                  "  pm.expect(data).to.have.property(\"status\", \"pending\");",
                   "  pm.expect(data).to.have.property(\"items\");",
                   "  pm.expect(data).to.have.property(\"government\");",
                   "  pm.expect(data).to.have.property(\"shippingLocation\");",
                   "  pm.expect(data).to.have.property(\"shippingFees\");",
+                  "  pm.expect(data).to.not.have.property(\"invoiceId\");",
                   "});",
-                  "if (data && (data._id || data.invoiceId)) {",
-                  "  pm.collectionVariables.set(\"sellingId\", data._id || data.invoiceId);",
+                  "if (data && (data._id || data.orderId)) {",
+                  "  pm.collectionVariables.set(\"websiteOrderId\", data._id || data.orderId);",
                   "}"
                 ]
               }
@@ -2362,7 +2459,7 @@
           ],
           "request": {
             "method": "POST",
-            "description": "Creates a selling invoice from the storefront checkout form. Required fields: customerName, customerPhone, government, shippingLocation, and products. The government must exist in Government Shipping Fees; the backend calculates shippingFees and applies the configured free-shipping threshold. Each product requires productId and price; quantity is optional and defaults to 1.",
+            "description": "Creates a pending website order from the storefront checkout form. Required fields: customerName, customerPhone, government, shippingLocation, and products. The government must exist in Government Shipping Fees; the backend calculates shippingFees and applies the configured free-shipping threshold. Each product requires productId and price; quantity is optional and defaults to 1. Confirm the website order to create a selling invoice.",
             "header": [
               {
                 "key": "Content-Type",
@@ -2382,6 +2479,299 @@
                 "api",
                 "cart",
                 "checkout"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Website Orders",
+      "item": [
+        {
+          "name": "Get Website Orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Website orders are paginated\", function () {",
+                  "  pm.expect(data).to.have.property(\"success\", true);",
+                  "  pm.expect(data).to.have.property(\"data\").that.is.an(\"array\");",
+                  "  pm.expect(data).to.have.property(\"pagination\");",
+                  "});",
+                  "if (data.data && data.data[0] && data.data[0]._id) {",
+                  "  pm.collectionVariables.set(\"websiteOrderId\", data.data[0]._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "description": "Returns all website orders with pagination. Orders can be pending, accepted, or refunded.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-orders?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-orders"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pending Website Orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Pending website orders are returned\", function () {",
+                  "  pm.expect(data).to.have.property(\"success\", true);",
+                  "  pm.expect(data).to.have.property(\"data\").that.is.an(\"array\");",
+                  "  pm.expect(data).to.have.property(\"pagination\");",
+                  "});",
+                  "if (data.data && data.data[0] && data.data[0]._id) {",
+                  "  pm.collectionVariables.set(\"websiteOrderId\", data.data[0]._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "description": "Returns pending website orders that have not yet been confirmed or refunded.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-orders/pending?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-orders",
+                "pending"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Accepted Website Orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Accepted website orders are returned\", function () {",
+                  "  pm.expect(data).to.have.property(\"success\", true);",
+                  "  pm.expect(data).to.have.property(\"data\").that.is.an(\"array\");",
+                  "  pm.expect(data).to.have.property(\"pagination\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "description": "Returns confirmed website orders. These orders have a linked selling invoice.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-orders/accepted?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-orders",
+                "accepted"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Refunded Website Orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Refunded website orders are returned\", function () {",
+                  "  pm.expect(data).to.have.property(\"success\", true);",
+                  "  pm.expect(data).to.have.property(\"data\").that.is.an(\"array\");",
+                  "  pm.expect(data).to.have.property(\"pagination\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "description": "Returns website orders that were refunded directly or moved to refunded when their linked selling invoice was refunded.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/website-orders/refunded?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-orders",
+                "refunded"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Website Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Website order confirmation creates a selling invoice\", function () {",
+                  "  pm.expect(data).to.have.property(\"success\", true);",
+                  "  pm.expect(data).to.have.nested.property(\"data.order.status\", \"accepted\");",
+                  "  pm.expect(data).to.have.nested.property(\"data.invoice._id\");",
+                  "  pm.expect(data).to.have.nested.property(\"data.invoice.items\");",
+                  "});",
+                  "if (data.data && data.data.order && data.data.order._id) {",
+                  "  pm.collectionVariables.set(\"websiteOrderId\", data.data.order._id);",
+                  "}",
+                  "if (data.data && data.data.invoice && (data.data.invoice._id || data.data.invoice.invoiceId)) {",
+                  "  pm.collectionVariables.set(\"sellingId\", data.data.invoice._id || data.data.invoice.invoiceId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Confirms a pending website order and creates the linked selling invoice. Send confirmInsufficientInventory=true to auto-restock shortages, matching selling invoice behavior.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirmInsufficientInventory\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/website-orders/{{websiteOrderId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-orders",
+                "{{websiteOrderId}}",
+                "confirm"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Refund Website Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Website order is refunded\", function () {",
+                  "  pm.expect(data).to.have.property(\"success\", true);",
+                  "  pm.expect(data).to.have.nested.property(\"data.status\", \"refunded\");",
+                  "  pm.expect(data).to.have.nested.property(\"data.refundedAt\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Marks a website order as refunded. Accepted orders can also move to refunded when the linked selling invoice is refunded through POST /api/returns.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Customer cancelled website order\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/website-orders/{{websiteOrderId}}/refund",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "website-orders",
+                "{{websiteOrderId}}",
+                "refund"
               ]
             }
           },
@@ -2510,6 +2900,10 @@
     {
       "key": "freeShippingMinimumAmount",
       "value": "1000"
+    },
+    {
+      "key": "websiteOrderId",
+      "value": ""
     }
   ]
 }

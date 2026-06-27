@@ -4,6 +4,7 @@ const Product = require("../models/product.model");
 const Selling = require("../models/selling.model");
 const ShippingSetting = require("../models/shippingSetting.model");
 const ReturnLog = require("../models/returnLog.model");
+const WebsiteOrder = require("../models/websiteOrder.model");
 const asyncHandler = require("../utils/asyncHandler");
 const { createReturnLog } = require("../services/returns.service");
 const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
@@ -307,6 +308,50 @@ const getSellingItems = (selling) => {
 
 const getInvoiceIdentifier = (selling) => selling.invoiceId ?? selling._id;
 
+const getRefundedQuantityByItemId = (selling) => {
+  const refundedQuantityByItemId = new Map();
+
+  for (const refund of selling.refunds || []) {
+    for (const item of refund.items || []) {
+      if (!item.invoiceItemId) continue;
+
+      const itemId = item.invoiceItemId.toString();
+      refundedQuantityByItemId.set(
+        itemId,
+        Number(refundedQuantityByItemId.get(itemId) || 0) + Number(item.quantity || 0)
+      );
+    }
+  }
+
+  return refundedQuantityByItemId;
+};
+
+const getVisibleSellingItems = (selling) => {
+  const refundedQuantityByItemId = getRefundedQuantityByItemId(selling);
+
+  return getSellingItems(selling)
+    .map((item) => {
+      if (!item._id) return item;
+
+      const refundedQuantity = Number(refundedQuantityByItemId.get(item._id.toString()) || 0);
+      const originalQuantity = Number(item.quantity || 0);
+      const remainingQuantity = originalQuantity - refundedQuantity;
+
+      if (remainingQuantity <= 0) return null;
+
+      return {
+        ...(item.toObject?.() ?? item),
+        quantity: remainingQuantity,
+        totalPrice: roundMoney(Number(item.unitPrice || 0) * remainingQuantity),
+        profitAmount:
+          originalQuantity > 0
+            ? roundMoney((Number(item.profitAmount || 0) / originalQuantity) * remainingQuantity)
+            : 0,
+      };
+    })
+    .filter(Boolean);
+};
+
 const toSellingInvoiceItem = (item, selling, options = {}) => {
   const sellingHistoryItem = {
     _id: item._id ?? null,
@@ -334,7 +379,10 @@ const toSellingInvoiceItem = (item, selling, options = {}) => {
 };
 
 const toSellingInvoice = (selling, options = {}) => {
-  const items = getSellingItems(selling).map((item) => toSellingInvoiceItem(item, selling, options));
+  const visibleItems = options.excludeRefundedItems
+    ? getVisibleSellingItems(selling)
+    : getSellingItems(selling);
+  const items = visibleItems.map((item) => toSellingInvoiceItem(item, selling, options));
   const totals = buildInvoiceTotals(items, {
     discountAmount: selling.discountAmount,
     discountPercentage: selling.discountPercentage,
@@ -350,10 +398,12 @@ const toSellingInvoice = (selling, options = {}) => {
     government: selling.government ?? null,
     sellingDate: selling.sellingDate,
     itemCount: items.length,
-    totalQuantity: selling.totalQuantity ?? totals.totalQuantity,
+    totalQuantity: options.excludeRefundedItems
+      ? totals.totalQuantity
+      : selling.totalQuantity ?? totals.totalQuantity,
     discountAmount: totals.discountAmount,
     shippingFees: selling.shippingFees ?? totals.shippingFees,
-    totalPrice: selling.totalPrice ?? totals.totalPrice,
+    totalPrice: options.excludeRefundedItems ? totals.totalPrice : selling.totalPrice ?? totals.totalPrice,
     totalProfit: roundMoney(
       items.reduce((sum, item) => sum + Number(item.profitAmount || 0), 0) - totals.discountAmount
     ),
@@ -733,6 +783,33 @@ const normalizeCartCheckoutItems = (products, res) => {
   });
 };
 
+const buildWebsiteOrderItems = async (items, res) => {
+  const productIds = [...new Set(items.map((item) => item.productId.toString()))];
+  const products = await Product.find({ _id: { $in: productIds } }).populate("category", "name");
+  const productsById = new Map(products.map((product) => [product._id.toString(), product]));
+
+  if (products.length !== productIds.length) {
+    res.status(404);
+    throw new Error("تعذر العثور على أحد منتجات طلب الموقع");
+  }
+
+  return items.map((item) => {
+    const product = productsById.get(item.productId.toString());
+    const unitPrice = roundMoney(item.unitPrice);
+    const quantity = Number(item.quantity);
+
+    return {
+      product: product._id,
+      productName: product.name,
+      productCode: product.code,
+      categoryName: product.category?.name ?? "Uncategorized",
+      quantity,
+      unitPrice,
+      totalPrice: roundMoney(unitPrice * quantity),
+    };
+  });
+};
+
 const createSelling = asyncHandler(async (req, res) => {
   const selling = await createSellingInvoice({
     body: req.body,
@@ -779,33 +856,64 @@ const checkoutCart = asyncHandler(async (req, res) => {
   const qualifiesForFreeShipping =
     freeShippingMinimumAmount > 0 && cartSubtotal >= freeShippingMinimumAmount;
 
-  const selling = await createSellingInvoice({
-    body: {
-      ...req.body,
-      government: governmentFee.government,
-      shippingFees: qualifiesForFreeShipping ? 0 : governmentFee.shippingFees,
-      sellingDate: req.body.sellingDate ?? new Date(),
-      items: normalizedCartItems.map((item) => ({
-        productId: item.productId,
-        price: item.unitPrice,
-        quantity: item.quantity,
-      })),
-    },
-    res,
-    options: {
-      defaultQuantity: 1,
-      defaultSellingDate: new Date(),
-      requireShippingLocation: true,
-      requireGovernment: true,
-    },
+  const normalizedCustomerName = normalizeRequiredString(req.body.customerName, "اسم العميل", res);
+  const normalizedCustomerPhone = normalizeRequiredString(req.body.customerPhone, "رقم هاتف العميل", res);
+  const normalizedShippingLocation = normalizeRequiredString(
+    req.body.shippingLocation,
+    "عنوان الشحن",
+    res
+  );
+  const orderItems = await buildWebsiteOrderItems(normalizedCartItems, res);
+  const orderSubtotal = roundMoney(
+    orderItems.reduce((total, item) => total + Number(item.totalPrice || 0), 0)
+  );
+  const shippingFees = qualifiesForFreeShipping ? 0 : governmentFee.shippingFees;
+  const order = await WebsiteOrder.create({
+    customerName: normalizedCustomerName,
+    customerPhone: normalizedCustomerPhone,
+    shippingLocation: normalizedShippingLocation,
+    government: governmentFee.government,
+    orderDate:
+      req.body.sellingDate === undefined
+        ? new Date()
+        : normalizeSellingDate(req.body.sellingDate, res),
+    items: orderItems,
+    totalQuantity: orderItems.reduce((total, item) => total + Number(item.quantity || 0), 0),
+    discountAmount: 0,
+    shippingFees,
+    totalPrice: roundMoney(orderSubtotal + Number(shippingFees || 0)),
   });
 
-  res.status(201).json(toSellingInvoice(selling));
+  res.status(201).json({
+    _id: order._id,
+    orderId: order._id,
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    shippingLocation: order.shippingLocation,
+    government: order.government,
+    orderDate: order.orderDate,
+    itemCount: order.items.length,
+    totalQuantity: order.totalQuantity,
+    discountAmount: order.discountAmount,
+    shippingFees: order.shippingFees,
+    totalPrice: order.totalPrice,
+    status: order.status,
+    items: order.items.map((item) => ({
+      _id: item._id,
+      productId: item.product,
+      productName: item.productName,
+      productCode: item.productCode ?? null,
+      categoryName: item.categoryName ?? null,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+    })),
+  });
 });
 
 const getSellings = asyncHandler(async (req, res) => {
   const { categoryId, productId, customerName, customerPhone, sellingDate } = req.query;
-  const sellingQuery = {};
+  const sellingQuery = { refundStatus: { $ne: "full" } };
   const { page, limit, skip } = getPaginationParams(req.query);
 
   if (
@@ -902,7 +1010,12 @@ const getSellings = asyncHandler(async (req, res) => {
 
   res.json(
     buildPaginatedResponse({
-      data: sellings.map((selling) => toSellingInvoice(selling, { includeProductCode: true })),
+      data: sellings.map((selling) =>
+        toSellingInvoice(selling, {
+          includeProductCode: true,
+          excludeRefundedItems: true,
+        })
+      ),
       page,
       limit,
       totalItems,
@@ -921,7 +1034,17 @@ const getSellingById = asyncHandler(async (req, res) => {
     throw new Error("سجل البيع غير موجود");
   }
 
-  res.json(toSellingInvoice(selling, { includeProductCode: true }));
+  if (selling.refundStatus === "full") {
+    res.status(404);
+    throw new Error("سجل البيع غير موجود");
+  }
+
+  res.json(
+    toSellingInvoice(selling, {
+      includeProductCode: true,
+      excludeRefundedItems: true,
+    })
+  );
 });
 
 const updateSelling = asyncHandler(async (req, res) => {
@@ -1130,6 +1253,17 @@ const addSellingRefund = asyncHandler(async (req, res) => {
     selling.refundedAmount = roundMoney(previousRefundedAmount + finalReturnedAmount);
     selling.refundStatus = isFull ? "full" : "partial";
     await selling.save();
+    await WebsiteOrder.updateOne(
+      { selling: selling._id, status: "accepted" },
+      {
+        status: "refunded",
+        refundedAt: new Date(),
+        refundReason: note?.trim() || "Refunded from selling invoice",
+      }
+    );
+    if (isFull) {
+      await selling.deleteOne();
+    }
   } catch (error) {
     if (returnLog) { try { await ReturnLog.deleteOne({ _id: returnLog._id }); } catch (_rollbackError) {} }
     for (const snapshot of snapshots) {
@@ -1140,18 +1274,39 @@ const addSellingRefund = asyncHandler(async (req, res) => {
     throw error;
   }
 
+  if (isFull) {
+    return res.status(201).json({
+      success: true,
+      data: {
+        deletedInvoiceId: selling._id,
+        returnLog,
+      },
+    });
+  }
+
   await selling.populate("items.product", "code");
   await selling.populate("product", "code");
   await selling.populate("refunds.items.product", "code");
-  res.status(201).json({ success: true, data: { invoice: toSellingInvoice(selling, { includeProductCode: true }), returnLog } });
+  res.status(201).json({
+    success: true,
+    data: {
+      invoice: toSellingInvoice(selling, {
+        includeProductCode: true,
+        excludeRefundedItems: true,
+      }),
+      returnLog,
+    },
+  });
 });
 
 module.exports = {
   checkoutCart,
+  createSellingInvoice,
   createSelling,
   getSellings,
   getSellingById,
   updateSelling,
   addSellingRefund,
   deleteSelling,
+  toSellingInvoice,
 };
