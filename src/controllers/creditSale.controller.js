@@ -7,6 +7,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { createReturnLog } = require("../services/returns.service");
 const { toCreditSaleInvoice } = require("../utils/creditSaleFormatter");
 const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
+const { buildPaginatedResponse, getPaginationParams } = require("../utils/pagination");
 
 const REACTIONARY_CREDIT_SALE_STATUS = "Reactionary";
 const CREDIT_SALE_STATUSES = new Set([
@@ -1095,6 +1096,7 @@ const createCreditSale = asyncHandler(async (req, res) => {
 const getCreditSales = asyncHandler(async (req, res) => {
   const { customerId, customerName, customerPhone, status, sellingDate, dueDate } = req.query;
   const creditSaleQuery = {};
+  const { page, limit, skip } = getPaginationParams(req.query);
 
   if (
     customerId !== undefined &&
@@ -1183,12 +1185,26 @@ const getCreditSales = asyncHandler(async (req, res) => {
     };
   }
 
-  const creditSales = await CreditSale.find(creditSaleQuery)
-    .populate("items.product", "code")
-    .populate("refunds.items.product", "code")
-    .sort({ sellingDate: -1, createdAt: -1 });
+  const [creditSales, totalItems] = await Promise.all([
+    CreditSale.find(creditSaleQuery)
+      .populate("items.product", "code")
+      .populate("refunds.items.product", "code")
+      .sort({ sellingDate: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    CreditSale.countDocuments(creditSaleQuery),
+  ]);
 
-  res.json(creditSales.map((creditSale) => toCreditSaleInvoice(creditSale, { includeProductCode: true })));
+  res.json(
+    buildPaginatedResponse({
+      data: creditSales.map((creditSale) =>
+        toCreditSaleInvoice(creditSale, { includeProductCode: true })
+      ),
+      page,
+      limit,
+      totalItems,
+    })
+  );
 });
 
 const getCreditSaleById = asyncHandler(async (req, res) => {

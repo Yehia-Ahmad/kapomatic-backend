@@ -7,6 +7,7 @@ const ReturnLog = require("../models/returnLog.model");
 const asyncHandler = require("../utils/asyncHandler");
 const { createReturnLog } = require("../services/returns.service");
 const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
+const { buildPaginatedResponse, getPaginationParams } = require("../utils/pagination");
 
 const getRawQuantity = (body) => {
   if (body.quantity !== undefined) return body.quantity;
@@ -805,6 +806,7 @@ const checkoutCart = asyncHandler(async (req, res) => {
 const getSellings = asyncHandler(async (req, res) => {
   const { categoryId, productId, customerName, customerPhone, sellingDate } = req.query;
   const sellingQuery = {};
+  const { page, limit, skip } = getPaginationParams(req.query);
 
   if (
     categoryId !== undefined &&
@@ -877,7 +879,7 @@ const getSellings = asyncHandler(async (req, res) => {
 
     const products = await Product.find(productFilter).select("_id").lean();
     if (products.length === 0) {
-      return res.json([]);
+      return res.json(buildPaginatedResponse({ data: [], page, limit, totalItems: 0 }));
     }
 
     const matchingProductIds = products.map((product) => product._id);
@@ -887,12 +889,25 @@ const getSellings = asyncHandler(async (req, res) => {
     ];
   }
 
-  const sellings = await Selling.find(sellingQuery)
-    .populate("items.product", "code")
-    .populate("product", "code")
-    .populate("refunds.items.product", "code")
-    .sort({ sellingDate: -1, createdAt: -1 });
-  res.json(sellings.map((selling) => toSellingInvoice(selling, { includeProductCode: true })));
+  const [sellings, totalItems] = await Promise.all([
+    Selling.find(sellingQuery)
+      .populate("items.product", "code")
+      .populate("product", "code")
+      .populate("refunds.items.product", "code")
+      .sort({ sellingDate: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Selling.countDocuments(sellingQuery),
+  ]);
+
+  res.json(
+    buildPaginatedResponse({
+      data: sellings.map((selling) => toSellingInvoice(selling, { includeProductCode: true })),
+      page,
+      limit,
+      totalItems,
+    })
+  );
 });
 
 const getSellingById = asyncHandler(async (req, res) => {
