@@ -567,10 +567,10 @@
           "name": "Get Products By Active Category",
           "request": {
             "method": "GET",
-            "description": "Returns only displayed products selected in selectedProducts for a category when that category has an e-commerce setting with showOnWebsite true. Add one or more specification/value query pairs to search displayed products by matching product specification values, for example specification=Color&value=Black&specification=Size&value=Medium.",
+            "description": "Returns only displayed products selected in selectedProducts for a category when that category has an e-commerce setting with showOnWebsite true. Response includes success, products, and pagination only. Add page and limit for pagination, sort/filter with price_asc, price_desc, or rating_desc, and one or more specification/value query pairs to search displayed products by matching product specification values.",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/ecommerce-settings/categories/active/{{categoryId}}/products?specification=Color&value=Black&specification=Size&value=Medium",
+              "raw": "{{baseUrl}}/api/ecommerce-settings/categories/active/{{categoryId}}/products?page=1&limit=10&sort=price_asc&specification=Color&value=Black&specification=Size&value=Medium",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -583,6 +583,19 @@
                 "products"
               ],
               "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "sort",
+                  "value": "price_asc",
+                  "description": "Allowed values: price_asc, price_desc, rating_desc"
+                },
                 {
                   "key": "specification",
                   "value": "Color"
@@ -598,6 +611,42 @@
                 {
                   "key": "value",
                   "value": "Medium"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Active Products",
+          "request": {
+            "method": "GET",
+            "description": "Searches all active e-commerce website products by product name. Only products selected in selectedProducts for categories with showOnWebsite true are returned. Results are ranked by relevance, then paginated. q is required.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ecommerce-settings/products/search?q={{productSearchName}}&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ecommerce-settings",
+                "products",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{productSearchName}}",
+                  "description": "Required product name search term"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
                 }
               ]
             }

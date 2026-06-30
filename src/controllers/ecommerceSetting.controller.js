@@ -5,10 +5,17 @@ const GeneralSetting = require("../models/generalSetting.model");
 const Product = require("../models/product.model");
 const ShippingSetting = require("../models/shippingSetting.model");
 const asyncHandler = require("../utils/asyncHandler");
+const { buildPaginationMetadata, getPaginationParams } = require("../utils/pagination");
 const { withProductPriceAfterDiscount } = require("../utils/productPricing");
 
 const ECOMMERCE_PRODUCT_FIELDS =
-  "name code image retailPrice wholesalePrice discountPercentage inventoryCount category specifications";
+  "name code image retailPrice wholesalePrice discountPercentage inventoryCount category specifications rating averageRating reviewCount reviewsCount";
+
+const ACTIVE_CATEGORY_PRODUCT_SORTS = new Set([
+  "price_asc",
+  "price_desc",
+  "rating_desc",
+]);
 
 const withPricingForSetting = (setting) => ({
   ...setting,
@@ -54,6 +61,8 @@ const normalizeComparableValue = (value) =>
   String(value && typeof value === "object" ? JSON.stringify(value) : value)
     .trim()
     .toLowerCase();
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const serializeUniqueValue = (value) =>
   value && typeof value === "object" ? JSON.stringify(value) : String(value);
@@ -103,6 +112,68 @@ const parseSpecificationSearchFilters = (query, res) => {
     return { specificationName, value };
   });
 };
+
+const parseActiveCategoryProductSort = (query, res) => {
+  const sort = query.sort ?? query.filter;
+
+  if (sort === undefined || sort === "") return undefined;
+
+  if (typeof sort !== "string" || !ACTIVE_CATEGORY_PRODUCT_SORTS.has(sort)) {
+    res.status(400);
+    throw new Error("قيمة sort غير صالحة");
+  }
+
+  return sort;
+};
+
+const getProductRating = (product) =>
+  Number(product.rating ?? product.averageRating ?? product.reviewRating ?? 0) || 0;
+
+const sortActiveCategoryProducts = (products, sort) => {
+  if (!sort) return products;
+
+  return [...products].sort((left, right) => {
+    if (sort === "price_asc" || sort === "price_desc") {
+      const leftPrice = Number(left.priceAfterDiscount ?? left.retailPrice ?? 0);
+      const rightPrice = Number(right.priceAfterDiscount ?? right.retailPrice ?? 0);
+      return sort === "price_asc" ? leftPrice - rightPrice : rightPrice - leftPrice;
+    }
+
+    return getProductRating(right) - getProductRating(left);
+  });
+};
+
+const normalizeSearchTerm = (value, res) => {
+  if (typeof value !== "string" || !value.trim()) {
+    res.status(400);
+    throw new Error("مطلوب معامل البحث q");
+  }
+
+  return value.trim();
+};
+
+const getProductSearchRelevance = (product, searchTerm) => {
+  const normalizedName = normalizeComparableValue(product.name);
+  const normalizedSearchTerm = normalizeComparableValue(searchTerm);
+  const matchIndex = normalizedName.indexOf(normalizedSearchTerm);
+
+  if (normalizedName === normalizedSearchTerm) return 0;
+  if (normalizedName.startsWith(normalizedSearchTerm)) return 1;
+  if (normalizedName.split(/\s+/).some((word) => word.startsWith(normalizedSearchTerm))) return 2;
+  if (matchIndex >= 0) return 3 + matchIndex / 1000;
+  return Number.MAX_SAFE_INTEGER;
+};
+
+const sortProductsByNameSearchRelevance = (products, searchTerm) =>
+  [...products].sort((left, right) => {
+    const relevanceDifference =
+      getProductSearchRelevance(left, searchTerm) -
+      getProductSearchRelevance(right, searchTerm);
+
+    if (relevanceDifference !== 0) return relevanceDifference;
+
+    return String(left.name || "").localeCompare(String(right.name || ""), "ar");
+  });
 
 const productMatchesSpecificationSearchFilters = (product, filters) =>
   filters.every(({ specificationName, value }) => {
@@ -477,7 +548,9 @@ const getEcommerceCategoryFilters = asyncHandler(async (req, res) => {
 
 const getProductsByActiveEcommerceCategory = asyncHandler(async (req, res) => {
   const categoryId = ensureObjectId(req.params.categoryId, "معرّف الفئة", res);
+  const { page, limit, skip } = getPaginationParams(req.query);
   const specificationSearchFilters = parseSpecificationSearchFilters(req.query, res);
+  const productSort = parseActiveCategoryProductSort(req.query, res);
   const [category, setting] = await Promise.all([
     Category.findById(categoryId).lean(),
     EcommerceSetting.findOne({ category: categoryId, showOnWebsite: true }).lean(),
@@ -494,38 +567,74 @@ const getProductsByActiveEcommerceCategory = asyncHandler(async (req, res) => {
   }
 
   const displayedProductIds = setting.selectedProducts || [];
-  const [products, allCategoryProducts] = await Promise.all([
+  const products =
     displayedProductIds.length > 0
-      ? Product.find({ _id: { $in: displayedProductIds }, category: categoryId })
+      ? await Product.find({ _id: { $in: displayedProductIds }, category: categoryId })
           .select(ECOMMERCE_PRODUCT_FIELDS)
           .sort({ createdAt: -1 })
           .lean()
-      : [],
-    Product.find({ category: categoryId })
-      .select(ECOMMERCE_PRODUCT_FIELDS)
-      .sort({ createdAt: -1 })
-      .lean(),
-  ]);
+      : [];
 
-  const specificationFilters = buildCategorySpecificationFilters(
-    category.specifications || [],
-    allCategoryProducts
-  );
   const filteredProducts =
     specificationSearchFilters.length > 0
       ? products.filter((product) =>
           productMatchesSpecificationSearchFilters(product, specificationSearchFilters)
         )
       : products;
+  const sortedProducts = sortActiveCategoryProducts(
+    filteredProducts.map(withProductPriceAfterDiscount),
+    productSort
+  );
+  const totalItems = sortedProducts.length;
+  const paginatedProducts = sortedProducts.slice(skip, skip + limit);
 
   res.json({
-    category: {
-      ...category,
-      specifications: specificationFilters,
-      filters: specificationFilters,
-    },
-    products: filteredProducts.map(withProductPriceAfterDiscount),
-    setting,
+    success: true,
+    products: paginatedProducts,
+    pagination: buildPaginationMetadata({ page, limit, totalItems }),
+  });
+});
+
+const searchActiveEcommerceProducts = asyncHandler(async (req, res) => {
+  const searchTerm = normalizeSearchTerm(req.query.q ?? req.query.search, res);
+  const { page, limit, skip } = getPaginationParams(req.query);
+
+  const settings = await EcommerceSetting.find({ showOnWebsite: true })
+    .select("selectedProducts")
+    .lean();
+  const productIds = [
+    ...new Set(
+      settings.flatMap((setting) =>
+        normalizeObjectIdsToStrings(setting.selectedProducts || [])
+      )
+    ),
+  ];
+
+  if (productIds.length === 0) {
+    return res.json({
+      success: true,
+      products: [],
+      pagination: buildPaginationMetadata({ page, limit, totalItems: 0 }),
+    });
+  }
+
+  const products = await Product.find({
+    _id: { $in: productIds },
+    name: { $regex: escapeRegex(searchTerm), $options: "i" },
+  })
+    .select(ECOMMERCE_PRODUCT_FIELDS)
+    .lean();
+  const sortedProducts = sortProductsByNameSearchRelevance(
+    products.map(withProductPriceAfterDiscount),
+    searchTerm
+  );
+  const totalItems = sortedProducts.length;
+  const paginatedProducts = sortedProducts.slice(skip, skip + limit);
+
+  res.json({
+    success: true,
+    products: paginatedProducts,
+    pagination: buildPaginationMetadata({ page, limit, totalItems }),
   });
 });
 
@@ -861,6 +970,7 @@ module.exports = {
   getActiveEcommerceSettingCategories,
   getEcommerceCategoryFilters,
   getProductsByActiveEcommerceCategory,
+  searchActiveEcommerceProducts,
   getProductByActiveEcommerceCategory,
   getEcommerceSettings,
   getStorefrontSettings,

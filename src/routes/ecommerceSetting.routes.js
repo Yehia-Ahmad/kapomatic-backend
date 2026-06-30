@@ -6,6 +6,7 @@ const {
   getEcommerceSettings,
   getProductByActiveEcommerceCategory,
   getProductsByActiveEcommerceCategory,
+  searchActiveEcommerceProducts,
   getStorefrontSettings,
   getHomePageCategories,
   updateHomePageCategories,
@@ -32,6 +33,7 @@ router.get(
   "/categories/active/:categoryId/products/:productId",
   getProductByActiveEcommerceCategory
 );
+router.get("/products/search", searchActiveEcommerceProducts);
 router.get("/storefront", getStorefrontSettings);
 router
   .route("/home-page/categories")
