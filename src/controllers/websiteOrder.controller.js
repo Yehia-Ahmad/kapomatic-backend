@@ -8,7 +8,14 @@ const WEBSITE_ORDER_POPULATE = [
   { path: "selling", select: "_id invoiceId sellingDate refundStatus refundedQuantity refundedAmount" },
 ];
 
-const toWebsiteOrder = (order) => ({
+const toWebsiteOrder = (
+  order,
+  options = {
+    includePaymentStatus: true,
+    includePaymentReference: true,
+    includePaymentNotes: true,
+  }
+) => ({
   _id: order._id,
   customerName: order.customerName,
   customerPhone: order.customerPhone,
@@ -21,6 +28,20 @@ const toWebsiteOrder = (order) => ({
   shippingFees: order.shippingFees,
   totalPrice: order.totalPrice,
   status: order.status,
+  payment: {
+    method: order.paymentMethod,
+    transferPhone: order.transferPhone ?? null,
+    transferImage: order.transferImage ?? null,
+    ...(options.includePaymentStatus ? { status: order.paymentStatus } : {}),
+    ...(options.includePaymentReference ? { reference: order.paymentReference ?? null } : {}),
+    ...(options.includePaymentNotes ? { notes: order.paymentNotes ?? null } : {}),
+  },
+  paymentMethod: order.paymentMethod,
+  transferPhone: order.transferPhone ?? null,
+  transferImage: order.transferImage ?? null,
+  ...(options.includePaymentStatus ? { paymentStatus: order.paymentStatus } : {}),
+  ...(options.includePaymentReference ? { paymentReference: order.paymentReference ?? null } : {}),
+  ...(options.includePaymentNotes ? { paymentNotes: order.paymentNotes ?? null } : {}),
   sellingId: order.selling?._id ?? order.selling ?? null,
   invoiceId: order.selling?.invoiceId ?? order.selling?._id ?? null,
   acceptedAt: order.acceptedAt ?? null,
@@ -57,7 +78,13 @@ const getWebsiteOrdersByStatus = (status) =>
 
     res.json(
       buildPaginatedResponse({
-        data: orders.map(toWebsiteOrder),
+        data: orders.map((order) =>
+          toWebsiteOrder(order, {
+            includePaymentStatus: false,
+            includePaymentReference: false,
+            includePaymentNotes: false,
+          })
+        ),
         page,
         limit,
         totalItems,

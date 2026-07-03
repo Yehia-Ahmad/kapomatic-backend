@@ -78,6 +78,8 @@ Backend API for a warehouse system with:
 - `freeShippingMinimumAmount` (non-negative number, defaults to `0`)
 - `storeLocations` (array of `{ name, detailedLocation, mapLink }`)
 - `socialMediaLinks` (array of `{ name, link }`)
+- `walletPhone` (optional phone number displayed for wallet transfers)
+- `instapayLink` (optional HTTPS link displayed for InstaPay transfers)
 - `homePageCategoryIds` (ordered list of categories displayed on the website home page)
 
 ## Setup
@@ -240,6 +242,8 @@ The response contains both `categoryIds` and populated `categories`. Send an emp
   "mainColor": "#1A73E8",
   "currencyCode": "EGP",
   "freeShippingMinimumAmount": 1000,
+  "walletPhone": "+201234567890",
+  "instapayLink": "https://ipn.eg/S/example",
   "storeLocations": [
     {
       "name": "Nasr City Store",
@@ -342,7 +346,9 @@ Sample customer payment payload:
 ### Cart
 - `POST /api/cart/checkout`
 
-Creates a new selling invoice row, deducts stock, creates/updates the customer by phone, and stores the submitted shipping location and government. The selected government must exist in the configured government shipping fees. The backend calculates `shippingFees` from that setting and applies free shipping when the cart subtotal reaches a configured non-zero `freeShippingMinimumAmount`.
+Creates a pending website order from the storefront checkout form. The selected government must exist in the configured government shipping fees. The backend calculates `shippingFees` from that setting and applies free shipping when the cart subtotal reaches a configured non-zero `freeShippingMinimumAmount`.
+
+`paymentMethod` is required. Accepted values are `cash`, `wallet`, and `instapay` (`CASH`, `E_WALLET`, and `INSTAPAY` are also accepted). Wallet and InstaPay orders require `transferPhone` and `transferImage`. `transferImage` must be a base64 image string or data URI. Cash orders ignore transfer phone/image fields.
 
 Sample checkout payload:
 ```json
@@ -351,6 +357,9 @@ Sample checkout payload:
   "customerPhone": "+201234567890",
   "government": "Cairo",
   "shippingLocation": "Cairo, Nasr City",
+  "paymentMethod": "wallet",
+  "transferPhone": "+201234567890",
+  "transferImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB...",
   "products": [
     {
       "productId": "66b0b7b5a8c197aa0adf1234",

@@ -9,6 +9,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { createReturnLog } = require("../services/returns.service");
 const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
 const { buildPaginatedResponse, getPaginationParams } = require("../utils/pagination");
+const { normalizeCheckoutPayment } = require("../utils/orderPayment");
 
 const getRawQuantity = (body) => {
   if (body.quantity !== undefined) return body.quantity;
@@ -863,6 +864,7 @@ const checkoutCart = asyncHandler(async (req, res) => {
     "عنوان الشحن",
     res
   );
+  const payment = normalizeCheckoutPayment(req.body, res);
   const orderItems = await buildWebsiteOrderItems(normalizedCartItems, res);
   const orderSubtotal = roundMoney(
     orderItems.reduce((total, item) => total + Number(item.totalPrice || 0), 0)
@@ -882,6 +884,7 @@ const checkoutCart = asyncHandler(async (req, res) => {
     discountAmount: 0,
     shippingFees,
     totalPrice: roundMoney(orderSubtotal + Number(shippingFees || 0)),
+    ...payment,
   });
 
   res.status(201).json({
@@ -898,6 +901,20 @@ const checkoutCart = asyncHandler(async (req, res) => {
     shippingFees: order.shippingFees,
     totalPrice: order.totalPrice,
     status: order.status,
+    payment: {
+      method: order.paymentMethod,
+      status: order.paymentStatus,
+      transferPhone: order.transferPhone ?? null,
+      transferImage: order.transferImage ?? null,
+      reference: order.paymentReference ?? null,
+      notes: order.paymentNotes ?? null,
+    },
+    paymentMethod: order.paymentMethod,
+    paymentStatus: order.paymentStatus,
+    transferPhone: order.transferPhone ?? null,
+    transferImage: order.transferImage ?? null,
+    paymentReference: order.paymentReference ?? null,
+    paymentNotes: order.paymentNotes ?? null,
     items: order.items.map((item) => ({
       _id: item._id,
       productId: item.product,

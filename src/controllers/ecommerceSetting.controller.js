@@ -283,6 +283,41 @@ const normalizeRequiredText = (value, fieldLabel, res) => {
   return value.trim();
 };
 
+const normalizeOptionalText = (value, fieldLabel, res, maxLength = 1000) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+
+  if (typeof value !== "string") {
+    res.status(400);
+    throw new Error(`${fieldLabel} غير صالح`);
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.length > maxLength) {
+    res.status(400);
+    throw new Error(`${fieldLabel} يجب ألا يزيد عن ${maxLength} حرف`);
+  }
+
+  return trimmed;
+};
+
+const normalizeOptionalHttpUrl = (value, fieldLabel, res) => {
+  const normalizedValue = normalizeOptionalText(value, fieldLabel, res, 2000);
+  if (!normalizedValue) return normalizedValue;
+
+  try {
+    const url = new URL(normalizedValue);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return normalizedValue;
+    }
+  } catch (_error) {}
+
+  res.status(400);
+  throw new Error(`${fieldLabel} غير صالح`);
+};
+
 const normalizeStoreLocations = (value, res) => {
   if (!Array.isArray(value)) {
     res.status(400);
@@ -769,6 +804,8 @@ const formatGeneralSettings = (generalSetting, websiteSetting) => {
         mainColor: "#000000",
         storeLocations: [],
         socialMediaLinks: [],
+        walletPhone: null,
+        instapayLink: null,
         homePageCategoryIds: [],
       };
 
@@ -826,6 +863,23 @@ const updateGeneralSettings = asyncHandler(async (req, res) => {
 
   if (req.body.socialMediaLinks !== undefined) {
     generalUpdate.socialMediaLinks = normalizeSocialMediaLinks(req.body.socialMediaLinks, res);
+  }
+
+  if (req.body.walletPhone !== undefined) {
+    generalUpdate.walletPhone = normalizeOptionalText(
+      req.body.walletPhone,
+      "رقم المحفظة",
+      res,
+      30
+    );
+  }
+
+  if (req.body.instapayLink !== undefined) {
+    generalUpdate.instapayLink = normalizeOptionalHttpUrl(
+      req.body.instapayLink,
+      "رابط انستاباي",
+      res
+    );
   }
 
   if (req.body.currencyCode !== undefined || req.body.currency !== undefined) {

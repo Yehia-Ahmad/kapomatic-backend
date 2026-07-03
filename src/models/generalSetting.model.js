@@ -92,6 +92,21 @@ const generalSettingSchema = new mongoose.Schema(
       type: [socialMediaLinkSchema],
       default: [],
     },
+    walletPhone: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: [30, "يجب ألا يزيد رقم المحفظة عن 30 حرف"],
+    },
+    instapayLink: {
+      type: String,
+      default: null,
+      trim: true,
+      validate: {
+        validator: (value) => value === null || value === "" || isHttpUrl(value),
+        message: "رابط انستاباي غير صالح",
+      },
+    },
     homePageCategoryIds: {
       type: [
         {

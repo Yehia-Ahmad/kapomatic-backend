@@ -263,7 +263,7 @@
           "name": "Get General Settings",
           "request": {
             "method": "GET",
-            "description": "Returns the main logo, main color, currency code, free-shipping minimum amount, store locations, and social media links.",
+            "description": "Returns the main logo, main color, currency code, free-shipping minimum amount, wallet phone, InstaPay link, store locations, and social media links.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/ecommerce-settings/general",
@@ -293,6 +293,8 @@
                   "  pm.expect(data.mainColor).to.eql(\"#1A73E8\");",
                   "  pm.expect(data.currencyCode).to.eql(\"EGP\");",
                   "  pm.expect(data.freeShippingMinimumAmount).to.eql(1000);",
+                  "  pm.expect(data.walletPhone).to.eql(\"+201234567890\");",
+                  "  pm.expect(data.instapayLink).to.eql(\"https://ipn.eg/S/example\");",
                   "  pm.expect(data.storeLocations).to.be.an(\"array\");",
                   "  pm.expect(data.socialMediaLinks).to.be.an(\"array\");",
                   "});"
@@ -311,7 +313,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"mainLogo\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==\",\n  \"mainColor\": \"#1A73E8\",\n  \"currencyCode\": \"EGP\",\n  \"freeShippingMinimumAmount\": 1000,\n  \"storeLocations\": [\n    {\n      \"name\": \"Nasr City Store\",\n      \"detailedLocation\": \"10 Example Street, Nasr City, Cairo\",\n      \"mapLink\": \"https://maps.google.com/?q=30.05,31.33\"\n    }\n  ],\n  \"socialMediaLinks\": [\n    {\n      \"name\": \"Facebook\",\n      \"link\": \"https://www.facebook.com/example\"\n    }\n  ]\n}"
+              "raw": "{\n  \"mainLogo\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==\",\n  \"mainColor\": \"#1A73E8\",\n  \"currencyCode\": \"EGP\",\n  \"freeShippingMinimumAmount\": 1000,\n  \"walletPhone\": \"+201234567890\",\n  \"instapayLink\": \"https://ipn.eg/S/example\",\n  \"storeLocations\": [\n    {\n      \"name\": \"Nasr City Store\",\n      \"detailedLocation\": \"10 Example Street, Nasr City, Cairo\",\n      \"mapLink\": \"https://maps.google.com/?q=30.05,31.33\"\n    }\n  ],\n  \"socialMediaLinks\": [\n    {\n      \"name\": \"Facebook\",\n      \"link\": \"https://www.facebook.com/example\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/ecommerce-settings/general",
@@ -2497,6 +2499,12 @@
                   "  pm.expect(data).to.have.property(\"government\");",
                   "  pm.expect(data).to.have.property(\"shippingLocation\");",
                   "  pm.expect(data).to.have.property(\"shippingFees\");",
+                  "  pm.expect(data).to.have.property(\"paymentMethod\", \"E_WALLET\");",
+                  "  pm.expect(data).to.have.property(\"paymentStatus\", \"PENDING\");",
+                  "  pm.expect(data).to.have.property(\"transferPhone\");",
+                  "  pm.expect(data).to.have.property(\"transferImage\");",
+                  "  pm.expect(data).to.have.nested.property(\"payment.transferPhone\");",
+                  "  pm.expect(data).to.have.nested.property(\"payment.transferImage\");",
                   "  pm.expect(data).to.not.have.property(\"invoiceId\");",
                   "});",
                   "if (data && (data._id || data.orderId)) {",
@@ -2508,7 +2516,7 @@
           ],
           "request": {
             "method": "POST",
-            "description": "Creates a pending website order from the storefront checkout form. Required fields: customerName, customerPhone, government, shippingLocation, and products. The government must exist in Government Shipping Fees; the backend calculates shippingFees and applies the configured free-shipping threshold. Each product requires productId and price; quantity is optional and defaults to 1. Confirm the website order to create a selling invoice.",
+            "description": "Creates a pending website order from the storefront checkout form. Required fields: customerName, customerPhone, government, shippingLocation, paymentMethod, and products. paymentMethod accepts cash, wallet, or instapay. Wallet and InstaPay require transferPhone and transferImage. transferImage must be a base64 image string or data URI. The government must exist in Government Shipping Fees; the backend calculates shippingFees and applies the configured free-shipping threshold. Each product requires productId and price; quantity is optional and defaults to 1. Confirm the website order to create a selling invoice.",
             "header": [
               {
                 "key": "Content-Type",
@@ -2517,7 +2525,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"government\": \"Cairo\",\n  \"shippingLocation\": \"Cairo, Nasr City\",\n  \"products\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"price\": 15,\n      \"quantity\": 2\n    },\n    {\n      \"productId\": \"{{productId}}\",\n      \"price\": 30\n    }\n  ]\n}"
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"government\": \"Cairo\",\n  \"shippingLocation\": \"Cairo, Nasr City\",\n  \"paymentMethod\": \"wallet\",\n  \"transferPhone\": \"{{customerPhone}}\",\n  \"transferImage\": \"data:image/png;base64,iVBORw0KGgo=\",\n  \"products\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"price\": 15,\n      \"quantity\": 2\n    },\n    {\n      \"productId\": \"{{productId}}\",\n      \"price\": 30\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/cart/checkout",
@@ -2551,6 +2559,13 @@
                   "  pm.expect(data).to.have.property(\"success\", true);",
                   "  pm.expect(data).to.have.property(\"data\").that.is.an(\"array\");",
                   "  pm.expect(data).to.have.property(\"pagination\");",
+                  "  if (data.data.length) {",
+                  "    pm.expect(data.data[0]).to.have.property(\"paymentMethod\");",
+                  "    pm.expect(data.data[0]).to.have.property(\"transferPhone\");",
+                  "    pm.expect(data.data[0]).to.have.property(\"transferImage\");",
+                  "    pm.expect(data.data[0]).to.have.nested.property(\"payment.transferPhone\");",
+                  "    pm.expect(data.data[0]).to.have.nested.property(\"payment.transferImage\");",
+                  "  }",
                   "});",
                   "if (data.data && data.data[0] && data.data[0]._id) {",
                   "  pm.collectionVariables.set(\"websiteOrderId\", data.data[0]._id);",

@@ -1,4 +1,11 @@
 const mongoose = require("mongoose");
+const {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_VALUES,
+  PAYMENT_STATUSES,
+  PAYMENT_STATUS_VALUES,
+} = require("../utils/orderPayment");
+const isBase64Image = require("../utils/isBase64Image");
 
 const websiteOrderItemSchema = new mongoose.Schema(
   {
@@ -119,10 +126,48 @@ const websiteOrderSchema = new mongoose.Schema(
       trim: true,
       maxlength: 1000,
     },
+    paymentMethod: {
+      type: String,
+      enum: PAYMENT_METHOD_VALUES,
+      required: true,
+      default: PAYMENT_METHODS.CASH,
+      index: true,
+    },
+    paymentStatus: {
+      type: String,
+      enum: PAYMENT_STATUS_VALUES,
+      required: true,
+      default: PAYMENT_STATUSES.PENDING,
+      index: true,
+    },
+    transferPhone: {
+      type: String,
+      trim: true,
+      maxlength: 30,
+    },
+    transferImage: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: (value) => value === undefined || value === null || value === "" || isBase64Image(value),
+        message: "صورة التحويل يجب أن تكون base64 image صالحة",
+      },
+    },
+    paymentReference: {
+      type: String,
+      trim: true,
+      maxlength: 120,
+    },
+    paymentNotes: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+    },
   },
   { timestamps: true }
 );
 
 websiteOrderSchema.index({ orderDate: -1, createdAt: -1 });
+websiteOrderSchema.index({ paymentStatus: 1, orderDate: -1 });
 
 module.exports = mongoose.model("WebsiteOrder", websiteOrderSchema);
