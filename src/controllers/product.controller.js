@@ -4,6 +4,7 @@ const Category = require("../models/category.model");
 const CreditSale = require("../models/creditSale.model");
 const Product = require("../models/product.model");
 const Selling = require("../models/selling.model");
+const WorkshopSale = require("../models/workshopSale.model");
 const asyncHandler = require("../utils/asyncHandler");
 const { buildInvoiceTotals, roundMoney } = require("../utils/invoicePricing");
 const { calculatePriceAfterDiscount } = require("../utils/productPricing");
@@ -186,6 +187,14 @@ const getCreditSaleItemProductId = (item) => {
   return item.product;
 };
 
+const getWorkshopSaleItemProductId = (item) => {
+  if (item.product && typeof item.product === "object" && item.product._id !== undefined) {
+    return item.product._id;
+  }
+
+  return item.product;
+};
+
 const allocateItemDiscounts = (items, discountAmount) => {
   const normalizedDiscountAmount = roundMoney(discountAmount || 0);
   const subtotal = roundMoney(items.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0));
@@ -280,7 +289,35 @@ const addInvoiceToProductProfitReport = ({
   });
 };
 
-const buildProductProfitRows = async ({ products, startDate, endDate }) => {
+const parseInvoiceTypeFilter = (value, res) => {
+  if (value === undefined || value === null || value === "") {
+    return new Set(["cash", "credit", "workshop"]);
+  }
+
+  if (typeof value !== "string") {
+    res.status(400);
+    throw new Error("تنسيق invoiceType غير صالح");
+  }
+
+  const requestedTypes = value
+    .split(",")
+    .map((type) => type.trim().toLowerCase())
+    .filter(Boolean)
+    .map((type) => (type === "custom" || type === "custom-sales" ? "workshop" : type));
+  const allowedTypes = new Set(["cash", "credit", "workshop"]);
+
+  if (
+    requestedTypes.length === 0 ||
+    requestedTypes.some((type) => !allowedTypes.has(type))
+  ) {
+    res.status(400);
+    throw new Error("invoiceType يجب أن يكون cash أو credit أو workshop");
+  }
+
+  return new Set(requestedTypes);
+};
+
+const buildProductProfitRows = async ({ products, startDate, endDate, invoiceTypes }) => {
   const rows = products.map(buildProductProfitReportRow);
   const rowsByProductId = new Map(rows.map((row) => [row.productId.toString(), row]));
   const productIds = [...rowsByProductId.keys()];
@@ -296,15 +333,29 @@ const buildProductProfitRows = async ({ products, startDate, endDate }) => {
     if (endDate) dateQuery.sellingDate.$lte = endDate;
   }
 
-  const [sellings, creditSales] = await Promise.all([
-    Selling.find({
-      ...dateQuery,
-      $or: [{ "items.product": { $in: productIds } }, { product: { $in: productIds } }],
-    }).lean(),
-    CreditSale.find({
-      ...dateQuery,
-      "items.product": { $in: productIds },
-    }).lean(),
+  const [sellings, creditSales, workshopSales] = await Promise.all([
+    invoiceTypes.has("cash")
+      ? Selling.find({
+          ...dateQuery,
+          $or: [{ "items.product": { $in: productIds } }, { product: { $in: productIds } }],
+        }).lean()
+      : [],
+    invoiceTypes.has("credit")
+      ? CreditSale.find({
+          ...dateQuery,
+          "items.product": { $in: productIds },
+        }).lean()
+      : [],
+    invoiceTypes.has("workshop")
+      ? WorkshopSale.find({
+          ...dateQuery,
+          status: { $ne: "cancelled" },
+          $or: [
+            { "materials.product": { $in: productIds } },
+            { "additionalComponents.product": { $in: productIds } },
+          ],
+        }).lean()
+      : [],
   ]);
 
   for (const selling of sellings) {
@@ -378,6 +429,47 @@ const buildProductProfitRows = async ({ products, startDate, endDate }) => {
         sellingPrice,
         revenue,
         purchasePrice,
+        profit,
+      });
+    });
+  }
+
+  for (const workshopSale of workshopSales) {
+    const items = [
+      ...(Array.isArray(workshopSale.materials) ? workshopSale.materials : []),
+      ...(Array.isArray(workshopSale.additionalComponents)
+        ? workshopSale.additionalComponents
+        : []),
+    ];
+    const workshopCostBasis = roundMoney(
+      Number(workshopSale.materialsCost || 0) +
+        Number(workshopSale.additionalComponentsCost || 0) +
+        Number(workshopSale.laborCost || 0)
+    );
+
+    items.forEach((item) => {
+      const productId = getWorkshopSaleItemProductId(item)?.toString();
+      const row = rowsByProductId.get(productId);
+      if (!row) return;
+
+      const quantity = Number(item.quantity || 0);
+      const sellingPrice = roundMoney(Number(item.unitPrice || 0));
+      const itemCost = roundMoney(Number(item.totalCost || 0));
+      const revenue =
+        workshopCostBasis > 0
+          ? roundMoney((Number(workshopSale.totalPrice || 0) * itemCost) / workshopCostBasis)
+          : 0;
+      const profit = roundMoney(revenue - itemCost);
+
+      addInvoiceToProductProfitReport({
+        row,
+        invoiceId: workshopSale._id,
+        invoiceType: "workshop",
+        sellingDate: workshopSale.sellingDate,
+        quantity,
+        sellingPrice,
+        revenue,
+        purchasePrice: quantity > 0 ? roundMoney(itemCost / quantity) : 0,
         profit,
       });
     });
@@ -820,6 +912,7 @@ const getProductsProfitReport = asyncHandler(async (req, res) => {
   const productId = parseOptionalObjectId(req.query.productId, "معرّف المنتج", res);
   const dateFrom = parseOptionalDate(req.query.dateFrom, "dateFrom", res);
   const dateTo = parseOptionalDate(req.query.dateTo, "dateTo", res, true);
+  const invoiceTypes = parseInvoiceTypeFilter(req.query.invoiceType, res);
 
   if (dateFrom && dateTo && dateFrom > dateTo) {
     res.status(400);
@@ -841,6 +934,7 @@ const getProductsProfitReport = asyncHandler(async (req, res) => {
     products,
     startDate: dateFrom,
     endDate: dateTo,
+    invoiceTypes,
   });
 
   res.json(report);
@@ -1022,9 +1116,35 @@ const getYearProfitBarChart = asyncHandler(async (req, res) => {
     { $sort: { _id: 1 } },
   ];
 
-  const [cashRows, creditRows] = await Promise.all([
+  const workshopPipeline = [
+    {
+      $match: {
+        sellingDate: {
+          $gte: startDate,
+          $lt: endDate,
+        },
+        status: { $ne: "cancelled" },
+      },
+    },
+    {
+      $project: {
+        month: { $month: "$sellingDate" },
+        profitAmount: { $ifNull: ["$profitAmount", 0] },
+      },
+    },
+    {
+      $group: {
+        _id: "$month",
+        profit: { $sum: "$profitAmount" },
+      },
+    },
+    { $sort: { _id: 1 } },
+  ];
+
+  const [cashRows, creditRows, workshopRows] = await Promise.all([
     Selling.aggregate(basePipeline),
     CreditSale.aggregate(basePipeline),
+    WorkshopSale.aggregate(workshopPipeline),
   ]);
 
   const monthLabels = [
@@ -1046,6 +1166,7 @@ const getYearProfitBarChart = asyncHandler(async (req, res) => {
     profit: 0,
     cashProfit: 0,
     creditProfit: 0,
+    workshopProfit: 0,
   }));
 
   for (const row of cashRows) {
@@ -1068,6 +1189,16 @@ const getYearProfitBarChart = asyncHandler(async (req, res) => {
     profitByMonth[monthIndex].profit = roundMoney(profitByMonth[monthIndex].profit + profit);
   }
 
+  for (const row of workshopRows) {
+    const monthIndex = Number(row._id || 0) - 1;
+    if (monthIndex < 0 || monthIndex >= 12) continue;
+    const profit = roundMoney(Number(row.profit || 0));
+    profitByMonth[monthIndex].workshopProfit = roundMoney(
+      profitByMonth[monthIndex].workshopProfit + profit
+    );
+    profitByMonth[monthIndex].profit = roundMoney(profitByMonth[monthIndex].profit + profit);
+  }
+
   const months = monthLabels.map((labels, index) => ({
     month: index + 1,
     label: labels.label,
@@ -1075,6 +1206,7 @@ const getYearProfitBarChart = asyncHandler(async (req, res) => {
     profit: profitByMonth[index].profit,
     cashProfit: profitByMonth[index].cashProfit,
     creditProfit: profitByMonth[index].creditProfit,
+    workshopProfit: profitByMonth[index].workshopProfit,
   }));
 
   res.json({

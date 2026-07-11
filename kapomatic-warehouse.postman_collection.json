@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Cash and credit refunds are created only through POST /api/returns using returnType and invoiceId. Cash full refunds delete the selling invoice; cash partial refunds hide refunded item quantities from selling invoice responses. Invoice DELETE endpoints remove only the invoice row and do not change inventory. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Selling creation returns HTTP 409 with shortage details when inventory is insufficient and supports confirmInsufficientInventory to auto-restock the missing quantity and complete the full sale. Cart checkout creates pending website orders from customer, shipping location, and products payloads. Confirming a website order creates the linked selling invoice; website orders can be listed by pending, accepted, and refunded status. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, custom sales, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Cash and credit refunds are created only through POST /api/returns using returnType and invoiceId. Cash full refunds delete the selling invoice; cash partial refunds hide refunded item quantities from selling invoice responses. Invoice DELETE endpoints remove only the invoice row and do not change inventory. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Selling creation returns HTTP 409 with shortage details when inventory is insufficient and supports confirmInsufficientInventory to auto-restock the missing quantity and complete the full sale. Cart checkout creates pending website orders from customer, shipping location, and products payloads. Confirming a website order creates the linked selling invoice; website orders can be listed by pending, accepted, and refunded status. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields. Custom Sales requests use the internal Workshop Sales API at /api/workshop-sales, support custom final products, materials with manualCost, additional components, labor, payments, delivery, cancellation, inventory deduction/restoration, and report filtering by invoiceType."
   },
   "item": [
     {
@@ -1196,10 +1196,10 @@
           "name": "Get Products Profit Report",
           "request": {
             "method": "GET",
-            "description": "Returns all product profit rows with optional filters. dateFrom and dateTo are optional.",
+            "description": "Returns product profit rows. Optional invoiceType can be cash, credit, workshop, custom, custom-sales, or a comma-separated list.",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/products/profit-report?categoryId={{categoryId}}&productId={{productId}}&dateFrom={{profitDateFrom}}&dateTo={{profitDateTo}}",
+              "raw": "{{baseUrl}}/api/products/profit-report?categoryId={{categoryId}}&productId={{productId}}&dateFrom={{profitDateFrom}}&dateTo={{profitDateTo}}&invoiceType={{profitInvoiceType}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1224,6 +1224,10 @@
                 {
                   "key": "dateTo",
                   "value": "{{profitDateTo}}"
+                },
+                {
+                  "key": "invoiceType",
+                  "value": "{{profitInvoiceType}}"
                 }
               ]
             }
@@ -1234,10 +1238,10 @@
           "name": "Get Product Profit Report By ID",
           "request": {
             "method": "GET",
-            "description": "Returns one product profit row including lastSellingDate, lastSellingPrice, and related invoices.",
+            "description": "Returns one product profit row. Optional invoiceType can include workshop/custom sales.",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/products/{{productId}}/profit-report?dateFrom={{profitDateFrom}}&dateTo={{profitDateTo}}",
+              "raw": "{{baseUrl}}/api/products/{{productId}}/profit-report?dateFrom={{profitDateFrom}}&dateTo={{profitDateTo}}&invoiceType={{profitInvoiceType}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1255,6 +1259,10 @@
                 {
                   "key": "dateTo",
                   "value": "{{profitDateTo}}"
+                },
+                {
+                  "key": "invoiceType",
+                  "value": "{{profitInvoiceType}}"
                 }
               ]
             }
@@ -1265,7 +1273,7 @@
           "name": "Get Year Profit Bar Chart",
           "request": {
             "method": "GET",
-            "description": "Returns monthly profit totals for the provided year aggregated across all products. Defaults to the current year when year is omitted.",
+            "description": "Returns monthly profit totals split into cashProfit, creditProfit, and workshopProfit.",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/products/profit-bar?year={{profitYear}}",
@@ -2144,6 +2152,403 @@
       ]
     },
     {
+      "name": "Custom Sales",
+      "description": "User-facing Custom Sales collection. Backend routes, model, service, controller, and collection remain named Workshop Sales internally. Per-material extra cost is entered as materials[].manualCost.",
+      "item": [
+        {
+          "name": "Get All Custom Sales",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "const rows = Array.isArray(payload) ? payload : (payload.data || []);",
+                  "if (rows.length > 0) {",
+                  "  const invoice = rows[0];",
+                  "  pm.test(\"Custom Sales invoice includes workshop totals\", function () {",
+                  "    pm.expect(invoice).to.have.property(\"invoiceType\", \"workshop\");",
+                  "    pm.expect(invoice).to.have.property(\"materialsCost\");",
+                  "    pm.expect(invoice).to.have.property(\"additionalComponentsCost\");",
+                  "    pm.expect(invoice).to.have.property(\"profitAmount\");",
+                  "    pm.expect(invoice).to.have.property(\"report\");",
+                  "  });",
+                  "  if (invoice._id || invoice.invoiceId) pm.collectionVariables.set(\"workshopSaleId\", invoice._id || invoice.invoiceId);",
+                  "  if (invoice.invoiceNumber) pm.collectionVariables.set(\"workshopInvoiceNumber\", invoice.invoiceNumber);",
+                  "  if (invoice.status) pm.collectionVariables.set(\"workshopSaleStatus\", invoice.status);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "description": "Returns paginated Custom Sales invoices from the internal /api/workshop-sales route. Each row includes report fields, calculated totals, payment totals, status, and productId/manualCost on inventory-backed materials.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/workshop-sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workshop-sales"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Custom Sales With Filters",
+          "request": {
+            "method": "GET",
+            "description": "Filters Custom Sales by customerName, customerPhone, invoiceNumber, status, sellingDate, deliveryDate, finalProductName, and invoiceType. Accepted invoiceType aliases are workshop, custom, and custom-sales.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/workshop-sales?customerName={{customerName}}&customerPhone={{customerPhone}}&invoiceNumber={{workshopInvoiceNumber}}&status={{workshopSaleStatus}}&sellingDate={{workshopSellingDate}}&deliveryDate={{workshopDeliveryDate}}&finalProductName={{workshopFinalProductName}}&invoiceType=custom-sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workshop-sales"
+              ],
+              "query": [
+                {
+                  "key": "customerName",
+                  "value": "{{customerName}}"
+                },
+                {
+                  "key": "customerPhone",
+                  "value": "{{customerPhone}}"
+                },
+                {
+                  "key": "invoiceNumber",
+                  "value": "{{workshopInvoiceNumber}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{workshopSaleStatus}}"
+                },
+                {
+                  "key": "sellingDate",
+                  "value": "{{workshopSellingDate}}"
+                },
+                {
+                  "key": "deliveryDate",
+                  "value": "{{workshopDeliveryDate}}"
+                },
+                {
+                  "key": "finalProductName",
+                  "value": "{{workshopFinalProductName}}"
+                },
+                {
+                  "key": "invoiceType",
+                  "value": "custom-sales"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Custom Sale By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Custom Sale detail includes invoice sections\", function () {",
+                  "  pm.expect(data).to.have.property(\"finalProductName\");",
+                  "  pm.expect(data).to.have.property(\"materials\").that.is.an(\"array\");",
+                  "  pm.expect(data).to.have.property(\"additionalComponents\").that.is.an(\"array\");",
+                  "  pm.expect(data).to.have.property(\"payments\").that.is.an(\"array\");",
+                  "});",
+                  "if (data && (data._id || data.invoiceId)) pm.collectionVariables.set(\"workshopSaleId\", data._id || data.invoiceId);",
+                  "if (data && data.invoiceNumber) pm.collectionVariables.set(\"workshopInvoiceNumber\", data.invoiceNumber);",
+                  "if (data && data.status) pm.collectionVariables.set(\"workshopSaleStatus\", data.status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "description": "Returns one Custom Sale invoice by document ID, including printable invoice data, materials with manualCost, additional components, payments, totals, status, and report summary fields.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/workshop-sales/{{workshopSaleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workshop-sales",
+                "{{workshopSaleId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Custom Sale",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Custom Sale is created\", function () {",
+                  "  pm.expect(pm.response.code).to.eql(201);",
+                  "  pm.expect(data).to.have.property(\"invoiceType\", \"workshop\");",
+                  "  pm.expect(data).to.have.property(\"totalPrice\");",
+                  "  pm.expect(data).to.have.property(\"remainingAmount\");",
+                  "});",
+                  "if (data && (data._id || data.invoiceId)) pm.collectionVariables.set(\"workshopSaleId\", data._id || data.invoiceId);",
+                  "if (data && data.invoiceNumber) pm.collectionVariables.set(\"workshopInvoiceNumber\", data.invoiceNumber);",
+                  "if (data && data.customerId) pm.collectionVariables.set(\"customerId\", data.customerId);",
+                  "if (data && data.status) pm.collectionVariables.set(\"workshopSaleStatus\", data.status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Creates a Custom Sale through the internal Workshop Sales API. Inventory is deducted for material/component lines with productId; manual material lines without productId do not affect inventory. Material totalCost is calculated as quantity * (unitPrice + manualCost). Component totalCost is calculated as quantity * unitPrice.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"{{workshopSellingDate}}\",\n  \"deliveryDate\": \"{{workshopDeliveryDate}}\",\n  \"finalProductName\": \"{{workshopFinalProductName}}\",\n  \"description\": \"Custom kitchen cabinet with accessories\",\n  \"quantity\": 1,\n  \"materials\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"name\": \"Wood board\",\n      \"quantity\": 2,\n      \"unit\": \"piece\",\n      \"unitPrice\": 120,\n      \"manualCost\": 20\n    },\n    {\n      \"name\": \"Paint finish\",\n      \"quantity\": 1,\n      \"unit\": \"job\",\n      \"unitPrice\": 75,\n      \"manualCost\": 10\n    }\n  ],\n  \"additionalComponents\": [\n    {\n      \"name\": \"Handles\",\n      \"quantity\": 4,\n      \"unit\": \"piece\",\n      \"unitPrice\": 15\n    }\n  ],\n  \"laborCost\": 150,\n  \"discountAmount\": 25,\n  \"initialPaidAmount\": 100,\n  \"initialPaymentDate\": \"{{workshopPaymentDate}}\",\n  \"initialPaymentNote\": \"Deposit\",\n  \"notes\": \"User-facing label: Custom Sales\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workshop-sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workshop-sales"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Custom Sale Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Custom Sale payment updates totals\", function () {",
+                  "  pm.expect(pm.response.code).to.eql(201);",
+                  "  pm.expect(data).to.have.property(\"paidAmount\");",
+                  "  pm.expect(data).to.have.property(\"remainingAmount\");",
+                  "  pm.expect(data).to.have.property(\"payments\").that.is.an(\"array\");",
+                  "});",
+                  "if (data && data.status) pm.collectionVariables.set(\"workshopSaleStatus\", data.status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Adds a payment to a Custom Sale invoice and recalculates paidAmount, remainingAmount, and status. Payment amount cannot exceed the selected invoice remainingAmount.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50,\n  \"paymentDate\": \"{{workshopPaymentDate}}\",\n  \"note\": \"Progress payment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workshop-sales/{{workshopSaleId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workshop-sales",
+                "{{workshopSaleId}}",
+                "payments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Custom Sale Delivered",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Custom Sale is delivered\", function () {",
+                  "  pm.expect(data).to.have.property(\"status\", \"delivered\");",
+                  "});",
+                  "pm.collectionVariables.set(\"workshopSaleStatus\", \"delivered\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Marks a Custom Sale invoice as delivered. This keeps the invoice history and does not restore inventory.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workshop-sales/{{workshopSaleId}}/mark-delivered",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workshop-sales",
+                "{{workshopSaleId}}",
+                "mark-delivered"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Custom Sale",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Custom Sale is cancelled\", function () {",
+                  "  pm.expect(data).to.have.property(\"status\", \"cancelled\");",
+                  "});",
+                  "pm.collectionVariables.set(\"workshopSaleStatus\", \"cancelled\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Cancels a Custom Sale invoice, restores inventory for material/component lines with productId, and keeps invoice history with status cancelled.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workshop-sales/{{workshopSaleId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workshop-sales",
+                "{{workshopSaleId}}",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Custom Sale",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Custom Sale is updated\", function () {",
+                  "  pm.expect(data).to.have.property(\"finalProductName\");",
+                  "  pm.expect(data).to.have.property(\"totalPrice\");",
+                  "  pm.expect(data).to.have.property(\"profitAmount\");",
+                  "});",
+                  "if (data && (data._id || data.invoiceId)) pm.collectionVariables.set(\"workshopSaleId\", data._id || data.invoiceId);",
+                  "if (data && data.status) pm.collectionVariables.set(\"workshopSaleStatus\", data.status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "description": "Updates Custom Sale invoice details. If materials/components change, inventory differences are validated and applied before saving. Per-material extra cost is sent as materials[].manualCost. Payments are changed through the payment endpoint.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"{{customerName}}\",\n  \"customerPhone\": \"{{customerPhone}}\",\n  \"sellingDate\": \"{{workshopSellingDate}}\",\n  \"deliveryDate\": \"{{workshopDeliveryDate}}\",\n  \"finalProductName\": \"{{workshopFinalProductName}} - Updated\",\n  \"description\": \"Updated custom build scope\",\n  \"quantity\": 1,\n  \"materials\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"name\": \"Wood board\",\n      \"quantity\": 1,\n      \"unit\": \"piece\",\n      \"unitPrice\": 120,\n      \"manualCost\": 15\n    },\n    {\n      \"name\": \"Fitting material\",\n      \"quantity\": 1,\n      \"unit\": \"job\",\n      \"unitPrice\": 80,\n      \"manualCost\": 20\n    }\n  ],\n  \"additionalComponents\": [\n    {\n      \"name\": \"Handles\",\n      \"quantity\": 4,\n      \"unit\": \"piece\",\n      \"unitPrice\": 15\n    }\n  ],\n  \"laborCost\": 175,\n  \"discountAmount\": 20,\n  \"notes\": \"Updated Custom Sales invoice\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workshop-sales/{{workshopSaleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workshop-sales",
+                "{{workshopSaleId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Custom Sale",
+          "request": {
+            "method": "DELETE",
+            "description": "Deletes a Custom Sale invoice and restores inventory for material/component lines with productId before deletion.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/workshop-sales/{{workshopSaleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workshop-sales",
+                "{{workshopSaleId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Website Images",
       "item": [
         {
@@ -2968,6 +3373,38 @@
     {
       "key": "websiteOrderId",
       "value": ""
+    },
+    {
+      "key": "profitInvoiceType",
+      "value": "cash,credit,workshop"
+    },
+    {
+      "key": "workshopSaleId",
+      "value": ""
+    },
+    {
+      "key": "workshopInvoiceNumber",
+      "value": ""
+    },
+    {
+      "key": "workshopSaleStatus",
+      "value": "pending"
+    },
+    {
+      "key": "workshopSellingDate",
+      "value": "2026-03-15"
+    },
+    {
+      "key": "workshopDeliveryDate",
+      "value": "2026-03-25"
+    },
+    {
+      "key": "workshopPaymentDate",
+      "value": "2026-03-16"
+    },
+    {
+      "key": "workshopFinalProductName",
+      "value": "Custom Kitchen Cabinet"
     }
   ]
 }

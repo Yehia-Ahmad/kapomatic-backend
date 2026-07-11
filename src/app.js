@@ -12,6 +12,7 @@ const returnsRoutes = require("./routes/returns.routes");
 const sellingRoutes = require("./routes/selling.routes");
 const websiteImageRoutes = require("./routes/websiteImage.routes");
 const websiteOrderRoutes = require("./routes/websiteOrder.routes");
+const workshopSaleRoutes = require("./routes/workshopSales.routes");
 const notFound = require("./middlewares/notFound.middleware");
 const errorHandler = require("./middlewares/error.middleware");
 
@@ -35,6 +36,7 @@ app.use("/api/returns", returnsRoutes);
 app.use("/api/sellings", sellingRoutes);
 app.use("/api/website-images", websiteImageRoutes);
 app.use("/api/website-orders", websiteOrderRoutes);
+app.use("/api/workshop-sales", workshopSaleRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
