@@ -197,12 +197,16 @@ const getLocalizedCategory = asyncHandler(async (req, res) => {
   const { language, slug } = req.params;
   assertLanguage(language, res);
   const normalizedSlug = normalizeSlug(slug, language);
-  const cacheKey = `category:${language}:${normalizedSlug}:${req.originalUrl}`;
+  const isObjectIdLookup = mongoose.Types.ObjectId.isValid(slug);
+  const cacheKey = `category:${language}:${isObjectIdLookup ? slug : normalizedSlug}:${req.originalUrl}`;
   const cached = cacheGet(cacheKey);
   if (cached) return res.json(cached);
 
-  const category = await Category.findOne({ [`translations.${language}.slug`]: normalizedSlug }).lean();
-  if (!category || !hasTranslation(category, language)) {
+  const categoryQuery = isObjectIdLookup
+    ? { _id: slug }
+    : { [`translations.${language}.slug`]: normalizedSlug };
+  const category = await Category.findOne(categoryQuery).lean();
+  if (!category || !hasPublicLocalizedValue(category, language)) {
     res.status(404);
     throw new Error("الفئة غير موجودة");
   }
@@ -218,7 +222,7 @@ const getLocalizedCategory = asyncHandler(async (req, res) => {
       id: category._id,
       name: getLocalizedName(category, language),
       description: getLocalized(category, language).description,
-      slug: normalizedSlug,
+      slug: getLocalizedSlug(category, language),
       imageUrl,
       imageAlt: getLocalized(category, language).imageAlt,
       products: [],
@@ -235,10 +239,14 @@ const getLocalizedCategoryProducts = asyncHandler(async (req, res) => {
   const { language, slug } = req.params;
   assertLanguage(language, res);
   const normalizedSlug = normalizeSlug(slug, language);
+  const isObjectIdLookup = mongoose.Types.ObjectId.isValid(slug);
   const { page, limit, skip } = getPaginationParams(req.query);
 
-  const category = await Category.findOne({ [`translations.${language}.slug`]: normalizedSlug }).lean();
-  if (!category || !hasTranslation(category, language)) {
+  const categoryQuery = isObjectIdLookup
+    ? { _id: slug }
+    : { [`translations.${language}.slug`]: normalizedSlug };
+  const category = await Category.findOne(categoryQuery).lean();
+  if (!category || !hasPublicLocalizedValue(category, language)) {
     res.status(404);
     throw new Error("الفئة غير موجودة");
   }
@@ -263,7 +271,7 @@ const getLocalizedCategoryProducts = asyncHandler(async (req, res) => {
       id: category._id,
       name: getLocalizedName(category, language),
       description: getLocalized(category, language).description,
-      slug: normalizedSlug,
+      slug: getLocalizedSlug(category, language),
       imageUrl: getEntityImageUrl(req, "category", category),
       imageAlt: getLocalized(category, language).imageAlt,
       products: localizedProducts.slice(skip, skip + limit).map((product) => serializeProduct(req, product, language, currency)),
