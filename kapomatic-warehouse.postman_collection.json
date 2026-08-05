@@ -3,7 +3,7 @@
     "_postman_id": "c3f7ec4d-1f66-4d59-9c4b-dc7fd8e5bb01",
     "name": "Kapomatic Warehouse API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Cash and credit refunds are created only through POST /api/returns using returnType and invoiceId. Cash full refunds delete the selling invoice; cash partial refunds hide refunded item quantities from selling invoice responses. Invoice DELETE endpoints remove only the invoice row and do not change inventory. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Selling creation returns HTTP 409 with shortage details when inventory is insufficient and supports confirmInsufficientInventory to auto-restock the missing quantity and complete the full sale. Cart checkout creates pending website orders from customer, shipping location, and products payloads. Confirming a website order creates the linked selling invoice; website orders can be listed by pending, accepted, and refunded status. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields."
+    "description": "Collection for Warehouse backend APIs (categories, customers, products, credit-sales, sellings, cart checkout, website currency, and shipping settings), updated to match current request fields and filters. Customer details now return lastCreditSaleDate, lastCashSaleDate, lastCreditSalePaymentDate, and creditSummary with debtStatusSummary, totalDebtAmount, paidAmount, remainingAmount, totalRefundDueAmount, totalReturnedPaidAmount, and totalReallocatedPaidAmount. Customer deletion now blocks outstanding credit invoices, returns a confirmation response for fully paid related credit invoices, and supports restoreCreditInvoices/restoreCreditSales/restoreInvoices to delete with or without restoring invoice items to inventory. Products now support purchasePrice and profit report endpoints. Cash and credit refunds are created only through POST /api/returns using returnType and invoiceId. Cash full refunds delete the selling invoice; cash partial refunds hide refunded item quantities from selling invoice responses. Invoice DELETE endpoints remove only the invoice row and do not change inventory. Credit-sale requests support customer linking, payment registration, partial or full invoice refunds, refundDueAmount tracking, automatic returnedPaidAmount handling on full refunds, automatic reallocatedPaidAmount handling when a partial refund creates overpayment, invoice status changing to Reactionary on full return, inventory deduction/restoration, and optional discountAmount plus shippingFees invoice fields. Selling creation returns HTTP 409 with shortage details when inventory is insufficient and supports confirmInsufficientInventory to auto-restock the missing quantity and complete the full sale. Cart checkout creates pending website orders from customer, shipping location, and products payloads. Confirming a website order creates the linked selling invoice; website orders can be listed by pending, accepted, and refunded status. Website settings store the currency, government shipping fees, and the minimum amount for free shipping. Update Product applies newInventory only when the payload inventoryCount matches the product's current stored inventoryCount. Selling and credit-sale responses now expose profit-related item fields. SEO and multilingual support requests are included for localized category/product slugs, slug availability, public localized lookups, slug aliases, crawlable public image URLs, localized search, and sitemap feeds."
   },
   "item": [
     {
@@ -99,6 +99,63 @@
               "path": [
                 "api",
                 "categories"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Category With SEO",
+          "request": {
+            "method": "POST",
+            "description": "Creates a category using the backward-compatible multilingual and SEO fields. Existing create payloads without these fields still work.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"قطع غيار فتيس\",\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"specifications\": [\n    {\n      \"name\": \"Brand\",\n      \"value\": \"Kapomatic\"\n    }\n  ],\n  \"translations\": {\n    \"ar\": {\n      \"name\": \"قطع غيار فتيس\",\n      \"description\": \"قطع غيار فتيس متاحة للطلب من كابوماتيك.\",\n      \"shortDescription\": \"قطع غيار فتيس\",\n      \"slug\": \"قطع غيار فتيس\",\n      \"imageAlt\": \"قطع غيار فتيس كابوماتيك\"\n    },\n    \"en\": {\n      \"name\": \"Transmission Parts\",\n      \"description\": \"Transmission parts available from Kapomatic.\",\n      \"shortDescription\": \"Transmission parts\",\n      \"slug\": \"Transmission Parts\",\n      \"imageAlt\": \"Kapomatic transmission parts\"\n    }\n  },\n  \"seo\": {\n    \"ar\": {\n      \"metaTitle\": \"قطع غيار فتيس في مصر | كابوماتيك\",\n      \"metaDescription\": \"اطلب قطع غيار فتيس من كابوماتيك.\",\n      \"keywords\": [\n        \"فتيس\",\n        \"قطع غيار\"\n      ]\n    },\n    \"en\": {\n      \"metaTitle\": \"Transmission Parts in Egypt | Kapomatic\",\n      \"metaDescription\": \"Order transmission parts from Kapomatic.\",\n      \"keywords\": [\n        \"transmission\",\n        \"parts\"\n      ]\n    },\n    \"robotsIndex\": true,\n    \"robotsFollow\": true,\n    \"includeInSitemap\": true,\n    \"sitemapPriority\": 0.7,\n    \"sitemapChangeFrequency\": \"weekly\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categories"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Category SEO",
+          "request": {
+            "method": "PUT",
+            "description": "Partially updates category translations and SEO. When a published slug changes, the previous slug is stored as an alias.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"translations\": {\n    \"ar\": {\n      \"slug\": \"قطع غيار فتيس اوتوماتيك\"\n    },\n    \"en\": {\n      \"slug\": \"automatic-transmission-parts\"\n    }\n  },\n  \"seo\": {\n    \"includeInSitemap\": true,\n    \"sitemapPriority\": 0.7\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categories",
+                "{{categoryId}}"
               ]
             }
           },
@@ -1147,6 +1204,63 @@
                   "key": "code",
                   "value": "{{productSearchCode}}"
                 }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product With SEO",
+          "request": {
+            "method": "POST",
+            "description": "Creates a product using optional translations and SEO fields. Existing product payloads remain valid.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"فلتر فتيس\",\n  \"code\": \"TR-FILTER-001\",\n  \"inventoryCount\": 10,\n  \"categoryId\": \"{{categoryId}}\",\n  \"wholesalePrice\": 750,\n  \"purchasePrice\": 650,\n  \"retailPrice\": 1000,\n  \"discountPercentage\": 10,\n  \"imageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",\n  \"translations\": {\n    \"ar\": {\n      \"name\": \"فلتر فتيس\",\n      \"description\": \"فلتر فتيس أصلي متاح للطلب من كابوماتيك.\",\n      \"shortDescription\": \"فلتر فتيس أصلي\",\n      \"slug\": \"فلتر فتيس\",\n      \"imageAlt\": \"فلتر فتيس كابوماتيك\"\n    },\n    \"en\": {\n      \"name\": \"Transmission Filter\",\n      \"description\": \"Original transmission filter available from Kapomatic.\",\n      \"shortDescription\": \"Original transmission filter\",\n      \"slug\": \"Transmission Filter\",\n      \"imageAlt\": \"Kapomatic transmission filter\"\n    }\n  },\n  \"seo\": {\n    \"ar\": {\n      \"metaTitle\": \"فلتر فتيس | كابوماتيك\",\n      \"metaDescription\": \"اطلب فلتر فتيس أصلي من كابوماتيك.\",\n      \"keywords\": [\n        \"فلتر فتيس\",\n        \"قطع غيار\"\n      ]\n    },\n    \"en\": {\n      \"metaTitle\": \"Transmission Filter | Kapomatic\",\n      \"metaDescription\": \"Order an original transmission filter from Kapomatic.\",\n      \"keywords\": [\n        \"transmission filter\",\n        \"auto parts\"\n      ]\n    },\n    \"robotsIndex\": true,\n    \"robotsFollow\": true,\n    \"includeInSitemap\": true,\n    \"sitemapPriority\": 0.8,\n    \"sitemapChangeFrequency\": \"weekly\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product SEO",
+          "request": {
+            "method": "PUT",
+            "description": "Partially updates product translations and SEO. Previous slugs are kept as aliases on change.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"translations\": {\n    \"ar\": {\n      \"slug\": \"فلتر-فتيس-اوتوماتيك\"\n    },\n    \"en\": {\n      \"slug\": \"automatic-transmission-filter\"\n    }\n  },\n  \"seo\": {\n    \"includeInSitemap\": true,\n    \"sitemapPriority\": 0.8\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
               ]
             }
           },
@@ -2842,6 +2956,529 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "SEO and Localized Public APIs",
+      "item": [
+        {
+          "name": "Check Arabic Category Slug Availability",
+          "request": {
+            "method": "GET",
+            "description": "Returns { available: true } when the localized category slug is not used by another category.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/seo/slug-availability?entityType=category&language=ar&slug=قطع غيار فتيس&excludeId={{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "seo",
+                "slug-availability"
+              ],
+              "query": [
+                {
+                  "key": "entityType",
+                  "value": "category"
+                },
+                {
+                  "key": "language",
+                  "value": "ar"
+                },
+                {
+                  "key": "slug",
+                  "value": "قطع غيار فتيس"
+                },
+                {
+                  "key": "excludeId",
+                  "value": "{{categoryId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Check English Product Slug Availability",
+          "request": {
+            "method": "GET",
+            "description": "Returns { available: true } when the localized product slug is not used by another product.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/seo/slug-availability?entityType=product&language=en&slug=transmission-filter&excludeId={{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "seo",
+                "slug-availability"
+              ],
+              "query": [
+                {
+                  "key": "entityType",
+                  "value": "product"
+                },
+                {
+                  "key": "language",
+                  "value": "en"
+                },
+                {
+                  "key": "slug",
+                  "value": "transmission-filter"
+                },
+                {
+                  "key": "excludeId",
+                  "value": "{{productId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Arabic Category By Slug",
+          "request": {
+            "method": "GET",
+            "description": "Returns a visible storefront category and SEO payload by Arabic slug.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/ar/categories/{{categorySlugAr}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "ar",
+                "categories",
+                "{{categorySlugAr}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get English Category By Slug",
+          "request": {
+            "method": "GET",
+            "description": "Returns a visible storefront category and SEO payload by English slug.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/en/categories/{{categorySlugEn}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "en",
+                "categories",
+                "{{categorySlugEn}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Arabic Category Products By Slug",
+          "request": {
+            "method": "GET",
+            "description": "Returns only selected storefront products for a visible category, localized in Arabic.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/ar/categories/{{categorySlugAr}}/products?page=1&limit=10&sort=price_asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "ar",
+                "categories",
+                "{{categorySlugAr}}",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "sort",
+                  "value": "price_asc"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get English Category Products By Slug",
+          "request": {
+            "method": "GET",
+            "description": "Returns only selected storefront products for a visible category, localized in English.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/en/categories/{{categorySlugEn}}/products?page=1&limit=10&sort=price_desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "en",
+                "categories",
+                "{{categorySlugEn}}",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "sort",
+                  "value": "price_desc"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Arabic Product By Slug",
+          "request": {
+            "method": "GET",
+            "description": "Returns a storefront-available product, public image URL, pricing, availability, alternates, and SEO payload.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/ar/products/{{productSlugAr}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "ar",
+                "products",
+                "{{productSlugAr}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get English Product By Slug",
+          "request": {
+            "method": "GET",
+            "description": "Returns a storefront-available product, public image URL, pricing, availability, alternates, and SEO payload.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/en/products/{{productSlugEn}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "en",
+                "products",
+                "{{productSlugEn}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Arabic Public Products",
+          "request": {
+            "method": "GET",
+            "description": "Searches only active storefront products using Arabic fields, legacy name, and code.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/ar/products/search?q=فلتر&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "ar",
+                "products",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "فلتر"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search English Public Products",
+          "request": {
+            "method": "GET",
+            "description": "Searches only active storefront products using English fields and code.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/en/products/search?q=filter&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "en",
+                "products",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "filter"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve Arabic Category Slug Alias",
+          "request": {
+            "method": "GET",
+            "description": "Returns a 301 redirect payload for an old category slug when the category is still available.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/ar/slug-aliases/category/{{oldCategorySlugAr}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "ar",
+                "slug-aliases",
+                "category",
+                "{{oldCategorySlugAr}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve English Product Slug Alias",
+          "request": {
+            "method": "GET",
+            "description": "Returns a 301 redirect payload for an old product slug when the product is still available.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/en/slug-aliases/product/{{oldProductSlugEn}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "en",
+                "slug-aliases",
+                "product",
+                "{{oldProductSlugEn}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Public Category Image",
+          "request": {
+            "method": "GET",
+            "description": "Serves the category base64 image as a crawlable public image response with content type and cache headers.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/images/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "images",
+                "categories",
+                "{{categoryId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Public Product Image",
+          "request": {
+            "method": "GET",
+            "description": "Serves the product base64 image as a crawlable public image response with content type and cache headers.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/images/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "images",
+                "products",
+                "{{productId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sitemap Pages Feed",
+          "request": {
+            "method": "GET",
+            "description": "Base sitemap page feed for Angular SSR sitemap generation.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/seo/sitemap/pages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "seo",
+                "sitemap",
+                "pages"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sitemap Categories Feed",
+          "request": {
+            "method": "GET",
+            "description": "Paginated localized category sitemap rows. Hidden, noindex, and missing-slug records are excluded.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/seo/sitemap/categories?page=1&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "seo",
+                "sitemap",
+                "categories"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sitemap Products Feed",
+          "request": {
+            "method": "GET",
+            "description": "Paginated localized product sitemap rows. Hidden, noindex, and missing-slug records are excluded.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/seo/sitemap/products?page=1&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "seo",
+                "sitemap",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sitemap Images Feed",
+          "request": {
+            "method": "GET",
+            "description": "Paginated image sitemap rows using crawlable public image URLs.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/seo/sitemap/images?page=1&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "seo",
+                "sitemap",
+                "images"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -2968,6 +3605,36 @@
     {
       "key": "websiteOrderId",
       "value": ""
+    },
+    {
+      "key": "categorySlugAr",
+      "value": "قطع-غيار-فتيس",
+      "type": "string"
+    },
+    {
+      "key": "categorySlugEn",
+      "value": "transmission-parts",
+      "type": "string"
+    },
+    {
+      "key": "productSlugAr",
+      "value": "فلتر-فتيس",
+      "type": "string"
+    },
+    {
+      "key": "productSlugEn",
+      "value": "transmission-filter",
+      "type": "string"
+    },
+    {
+      "key": "oldCategorySlugAr",
+      "value": "قطع-غيار-فتيس-قديم",
+      "type": "string"
+    },
+    {
+      "key": "oldProductSlugEn",
+      "value": "old-transmission-filter",
+      "type": "string"
     }
   ]
 }

@@ -7,6 +7,7 @@ const ShippingSetting = require("../models/shippingSetting.model");
 const asyncHandler = require("../utils/asyncHandler");
 const { buildPaginationMetadata, getPaginationParams } = require("../utils/pagination");
 const { withProductPriceAfterDiscount } = require("../utils/productPricing");
+const { clearPublicSeoCache } = require("../utils/seo");
 
 const ECOMMERCE_PRODUCT_FIELDS =
   "name code image retailPrice wholesalePrice discountPercentage inventoryCount category specifications rating averageRating reviewCount reviewsCount";
@@ -1004,6 +1005,7 @@ const upsertEcommerceSetting = asyncHandler(async (req, res) => {
   );
 
   await populateSettingDocument(setting);
+  clearPublicSeoCache();
   res.json(withPricingForSetting(setting.toObject()));
 });
 
@@ -1016,6 +1018,7 @@ const resetEcommerceSetting = asyncHandler(async (req, res) => {
     throw new Error("إعدادات الفئة غير موجودة");
   }
 
+  clearPublicSeoCache();
   res.json({ message: "E-commerce setting reset successfully" });
 });
 

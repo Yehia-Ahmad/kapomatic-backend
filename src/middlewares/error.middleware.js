@@ -8,8 +8,15 @@ const errorHandler = (err, req, res, next) => {
   }
 
   if (err.code === 11000) {
-    statusCode = 400;
+    statusCode = 409;
     message = "تم إدخال قيمة مكررة";
+    err.responseData = {
+      ...(err.responseData || {}),
+      fieldErrors: Object.keys(err.keyPattern || err.keyValue || {}).map((field) => ({
+        field,
+        message: "مستخدم بالفعل",
+      })),
+    };
   }
 
   if (err.name === "ValidationError") {
