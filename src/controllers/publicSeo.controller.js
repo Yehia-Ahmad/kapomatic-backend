@@ -256,14 +256,12 @@ const getLocalizedCategoryProducts = asyncHandler(async (req, res) => {
     throw new Error("الفئة غير مفعلة في الموقع");
   }
 
-  const products = setting.selectedProducts?.length
-    ? await Product.find({ _id: { $in: setting.selectedProducts }, category: category._id })
-        .select(PRODUCT_PUBLIC_FIELDS)
-        .populate("category", "name image translations seo")
-        .sort(parseSort(req.query.sort))
-        .lean()
-    : [];
-  const localizedProducts = products.filter((product) => hasTranslation(product, language) && productMatchesFilters(product, req.query));
+  const products = await Product.find({ category: category._id })
+    .select(PRODUCT_PUBLIC_FIELDS)
+    .populate("category", "name image translations seo")
+    .sort(parseSort(req.query.sort))
+    .lean();
+  const localizedProducts = products.filter((product) => hasPublicLocalizedValue(product, language) && productMatchesFilters(product, req.query));
   const totalItems = localizedProducts.length;
   const currency = await getCurrency();
   const response = {
