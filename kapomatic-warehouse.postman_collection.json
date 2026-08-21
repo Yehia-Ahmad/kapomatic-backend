@@ -3199,20 +3199,19 @@
           "response": []
         },
         {
-          "name": "Search Arabic Public Products",
+          "name": "Search Public Products - Arabic Query",
           "request": {
             "method": "GET",
-            "description": "Searches only active storefront products using Arabic fields, legacy name, and code.",
+            "description": "Language-independent public storefront product search. Searches active storefront products across Arabic and English names, descriptions, short descriptions, legacy name, code, keywords, and slug aliases when present.",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/public/ar/products/search?q=فلتر&page=1&limit=10",
+              "raw": "{{baseUrl}}/api/public/products/search?q=فلتر&page=1&limit=10",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "public",
-                "ar",
                 "products",
                 "search"
               ],
@@ -3235,20 +3234,19 @@
           "response": []
         },
         {
-          "name": "Search English Public Products",
+          "name": "Search Public Products - English Query",
           "request": {
             "method": "GET",
-            "description": "Searches only active storefront products using English fields and code.",
+            "description": "Language-independent public storefront product search. English matching is case-insensitive and does not depend on browser or website language.",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/public/en/products/search?q=filter&page=1&limit=10",
+              "raw": "{{baseUrl}}/api/public/products/search?q=filter&page=1&limit=10",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "public",
-                "en",
                 "products",
                 "search"
               ],
@@ -3256,6 +3254,41 @@
                 {
                   "key": "q",
                   "value": "filter"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Public Products - Partial Arabic Query",
+          "request": {
+            "method": "GET",
+            "description": "Partial Arabic matching example. A query such as فور can match a product field containing فورد.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/products/search?q=فور&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "products",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "فور"
                 },
                 {
                   "key": "page",

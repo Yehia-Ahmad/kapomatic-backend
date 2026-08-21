@@ -26,14 +26,29 @@ const ENTITY_MODELS = {
 
 const PRODUCT_PUBLIC_FIELDS =
   "name code image retailPrice discountPercentage inventoryCount category specifications translations seo slugAliases updatedAt createdAt";
+const PRODUCT_SEARCH_FIELDS = [
+  "name",
+  "code",
+  "translations.ar.name",
+  "translations.en.name",
+  "translations.ar.shortDescription",
+  "translations.en.shortDescription",
+  "translations.ar.description",
+  "translations.en.description",
+  "seo.ar.keywords",
+  "seo.en.keywords",
+  "slugAliases.slug",
+];
 
 const getLocalized = (entity, language) => entity?.translations?.[language] || {};
 const hasTranslation = (entity, language) => Boolean(getLocalized(entity, language).name && getLocalized(entity, language).slug);
 const allowArabicLegacyFallback = (entity, language) => language === "ar" && Boolean(entity?.name);
 const hasPublicLocalizedValue = (entity, language) =>
   hasTranslation(entity, language) || allowArabicLegacyFallback(entity, language);
+const hasAnyPublicLocalizedValue = (entity) => LANGUAGES.some((language) => hasPublicLocalizedValue(entity, language));
 const getLocalizedName = (entity, language) =>
   getLocalized(entity, language).name || (language === "ar" ? entity.name : undefined);
+const getResponseLanguage = (req) => (LANGUAGES.includes(req.params.language) ? req.params.language : "ar");
 const getRobots = (seo = {}) =>
   `${seo.robotsIndex === false ? "noindex" : "index"},${seo.robotsFollow === false ? "nofollow" : "follow"}`;
 const getCurrency = async () => {
@@ -109,6 +124,91 @@ const getActiveProductIds = async () => {
   return [...new Set(settings.flatMap((setting) => (setting.selectedProducts || []).map(String)))];
 };
 
+const getPublicProductSearchTerm = (query, res) => {
+  const searchTerm = String(query.q ?? query.search ?? "").trim();
+  if (!searchTerm) {
+    res.status(400);
+    throw new Error("مطلوب معامل البحث q");
+  }
+  return searchTerm;
+};
+
+const normalizeArabicSearchText = (value) =>
+  String(value)
+    .normalize("NFKD")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ـ/g, "");
+
+const hasArabicCharacters = (value) => /\p{Script=Arabic}/u.test(value);
+
+const arabicRegexCharacter = (character) => {
+  const escapedCharacter = escapeRegex(character);
+  if (character === "ا") return "[اأإآ]";
+  if (character === "أ" || character === "إ" || character === "آ") return "[اأإآ]";
+  return escapedCharacter;
+};
+
+const buildArabicSearchPattern = (value) =>
+  normalizeArabicSearchText(value)
+    .split("")
+    .map(arabicRegexCharacter)
+    .join("[\\u064B-\\u065F\\u0670ـ]*");
+
+const buildPublicProductSearchRegexes = (searchTerm) => {
+  const regexes = [new RegExp(escapeRegex(searchTerm), "i")];
+  if (hasArabicCharacters(searchTerm)) {
+    const arabicPattern = buildArabicSearchPattern(searchTerm);
+    if (arabicPattern && arabicPattern !== escapeRegex(searchTerm)) {
+      regexes.push(new RegExp(arabicPattern, "i"));
+    }
+  }
+  return regexes;
+};
+
+const buildPublicProductSearchQuery = (activeProductIds, searchTerm) => {
+  const regexes = buildPublicProductSearchRegexes(searchTerm);
+  return {
+    _id: { $in: activeProductIds },
+    $or: PRODUCT_SEARCH_FIELDS.flatMap((field) => regexes.map((regex) => ({ [field]: regex }))),
+  };
+};
+
+const getProductSearchValues = (product) => [
+  product.name,
+  product.code,
+  product.translations?.ar?.name,
+  product.translations?.en?.name,
+  product.translations?.ar?.shortDescription,
+  product.translations?.en?.shortDescription,
+  product.translations?.ar?.description,
+  product.translations?.en?.description,
+  ...(product.seo?.ar?.keywords || []),
+  ...(product.seo?.en?.keywords || []),
+  ...(product.slugAliases || []).map((alias) => alias.slug),
+];
+
+const normalizeComparableSearchValue = (value) => normalizeArabicSearchText(String(value || "")).toLowerCase();
+
+const getPublicProductSearchRelevance = (product, searchTerm) => {
+  const normalizedSearchTerm = normalizeComparableSearchValue(searchTerm);
+  if (!normalizedSearchTerm) return 4;
+  const values = getProductSearchValues(product).map(normalizeComparableSearchValue).filter(Boolean);
+  if (values.some((value) => value === normalizedSearchTerm)) return 0;
+  if (values.some((value) => value.startsWith(normalizedSearchTerm))) return 1;
+  if (values.some((value) => value.includes(normalizedSearchTerm))) return 2;
+  return 3;
+};
+
+const sortProductsByPublicSearchRelevance = (products, searchTerm) =>
+  [...products].sort((left, right) => {
+    const relevanceDiff =
+      getPublicProductSearchRelevance(left, searchTerm) -
+      getPublicProductSearchRelevance(right, searchTerm);
+    if (relevanceDiff !== 0) return relevanceDiff;
+    return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
+  });
+
 const parseSort = (sort) => {
   if (sort === "price_asc") return { retailPrice: 1, _id: 1 };
   if (sort === "price_desc") return { retailPrice: -1, _id: 1 };
@@ -147,6 +247,8 @@ const serializeProduct = (req, product, language, currency) => {
     slug: getLocalizedSlug(product, language),
     imageAlt: getLocalized(product, language).imageAlt,
     code: product.code,
+    translations: product.translations,
+    slugAliases: product.slugAliases || [],
     category: category
       ? {
           id: category._id,
@@ -338,28 +440,25 @@ const getLocalizedProduct = asyncHandler(async (req, res) => {
 });
 
 const searchLocalizedProducts = asyncHandler(async (req, res) => {
-  const { language } = req.params;
-  assertLanguage(language, res);
-  const searchTerm = String(req.query.q ?? req.query.search ?? "").trim();
-  if (!searchTerm) {
-    res.status(400);
-    throw new Error("مطلوب معامل البحث q");
-  }
+  const language = getResponseLanguage(req);
+  if (req.params.language) assertLanguage(req.params.language, res);
+  const searchTerm = getPublicProductSearchTerm(req.query, res);
   const { page, limit, skip } = getPaginationParams(req.query);
   const activeProductIds = await getActiveProductIds();
   if (activeProductIds.length === 0) {
     return res.json({ success: true, products: [], pagination: buildPaginationMetadata({ page, limit, totalItems: 0 }) });
   }
-  const regex = new RegExp(escapeRegex(searchTerm), "i");
-  const searchFields =
-    language === "ar"
-      ? [{ "translations.ar.name": regex }, { "translations.ar.description": regex }, { name: regex }, { code: regex }]
-      : [{ "translations.en.name": regex }, { "translations.en.description": regex }, { code: regex }];
-  const products = await Product.find({ _id: { $in: activeProductIds }, $or: searchFields })
+  const products = await Product.find(buildPublicProductSearchQuery(activeProductIds, searchTerm))
     .select(PRODUCT_PUBLIC_FIELDS)
     .populate("category", "name image translations seo")
     .lean();
-  const localizedProducts = products.filter((product) => hasTranslation(product, language));
+  const isLocalizedAlias = Boolean(req.params.language);
+  const localizedProducts = sortProductsByPublicSearchRelevance(
+    products.filter((product) =>
+      isLocalizedAlias ? hasPublicLocalizedValue(product, language) : hasAnyPublicLocalizedValue(product)
+    ),
+    searchTerm
+  );
   const currency = await getCurrency();
   const totalItems = localizedProducts.length;
   res.json({
@@ -494,4 +593,12 @@ module.exports = {
   getSitemapImages,
   getCategoryImage,
   getProductImage,
+  _private: {
+    buildPublicProductSearchQuery,
+    buildPublicProductSearchRegexes,
+    getPublicProductSearchTerm,
+    getPublicProductSearchRelevance,
+    normalizeArabicSearchText,
+    sortProductsByPublicSearchRelevance,
+  },
 };

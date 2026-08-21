@@ -21,6 +21,8 @@ router.get("/seo/sitemap/products", getSitemapProducts);
 router.get("/seo/sitemap/images", getSitemapImages);
 router.get("/images/categories/:id", getCategoryImage);
 router.get("/images/products/:id", getProductImage);
+router.get("/products/search", searchLocalizedProducts);
+// Deprecated compatibility aliases. New clients should use /api/public/products/search.
 router.get("/:language/products/search", searchLocalizedProducts);
 router.get("/:language/categories/:slug/products", getLocalizedCategoryProducts);
 router.get("/:language/categories/:slug", getLocalizedCategory);
