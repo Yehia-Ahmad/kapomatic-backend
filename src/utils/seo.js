@@ -302,9 +302,17 @@ const addSlugAliasesForChangedSlugs = (document, nextTranslations = {}) => {
   });
 };
 
+const DEFAULT_WEBSITE_ORIGIN = "https://kapomatic.com";
 const getRequestOrigin = (req) => `${req.protocol}://${req.get("host")}`;
-const getWebsiteOrigin = () => (process.env.WEBSITE_ORIGIN || "http://localhost:4200").replace(/\/+$/, "");
-const absoluteApiUrl = (req, path) => `${process.env.PUBLIC_API_ORIGIN || getRequestOrigin(req)}${path}`;
+const normalizePublicOrigin = (value, fallback) => {
+  const origin = String(value || fallback).replace(/\/+$/, "");
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return fallback;
+  return origin;
+};
+const getWebsiteOrigin = () => normalizePublicOrigin(process.env.WEBSITE_ORIGIN, DEFAULT_WEBSITE_ORIGIN);
+const getPublicApiOrigin = (req) =>
+  normalizePublicOrigin(process.env.PUBLIC_API_ORIGIN || getRequestOrigin(req), getWebsiteOrigin());
+const absoluteApiUrl = (req, path) => `${getPublicApiOrigin(req)}${path}`;
 const getEntityImageUrl = (req, entityType, entity) =>
   entity?.image ? absoluteApiUrl(req, `/api/public/images/${entityType}s/${entity._id}`) : undefined;
 
@@ -349,6 +357,7 @@ module.exports = {
   addSlugAliasesForChangedSlugs,
   escapeRegex,
   getWebsiteOrigin,
+  getPublicApiOrigin,
   getEntityImageUrl,
   cacheGet,
   cacheSet,

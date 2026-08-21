@@ -13,6 +13,7 @@ const {
   cacheSet,
   escapeRegex,
   getEntityImageUrl,
+  getPublicApiOrigin,
   getWebsiteOrigin,
   hasObjectId,
   normalizeSlug,
@@ -39,6 +40,8 @@ const PRODUCT_SEARCH_FIELDS = [
   "seo.en.keywords",
   "slugAliases.slug",
 ];
+const XML_CONTENT_TYPE = "application/xml; charset=utf-8";
+const SITEMAP_URL_LIMIT = 50_000;
 
 const getLocalized = (entity, language) => entity?.translations?.[language] || {};
 const hasTranslation = (entity, language) => Boolean(getLocalized(entity, language).name && getLocalized(entity, language).slug);
@@ -71,6 +74,154 @@ const alternates = (entity, entityType) => {
   if (ar) urls.xDefault = urls.ar;
   return urls;
 };
+
+const xmlEscape = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+
+const getSitemapRowLanguage = (row) => {
+  if (row.language) return row.language;
+  if (row.loc?.includes("/en/")) return "en";
+  return "ar";
+};
+
+const sitemapRowsForLanguage = (rows, language) =>
+  rows.filter((row) => getSitemapRowLanguage(row) === language);
+
+const renderAlternateLinks = (alternates = {}) =>
+  ["ar", "en", "xDefault"]
+    .flatMap((key) => {
+      const href = alternates[key];
+      if (!href) return [];
+      const hreflang = key === "xDefault" ? "x-default" : key;
+      return [`    <xhtml:link rel="alternate" hreflang="${hreflang}" href="${xmlEscape(href)}"/>`];
+    })
+    .join("\n");
+
+const renderSitemapUrl = (row) => {
+  const alternatesXml = renderAlternateLinks(row.alternates);
+  return [
+    "  <url>",
+    `    <loc>${xmlEscape(row.loc)}</loc>`,
+    row.lastmod ? `    <lastmod>${xmlEscape(row.lastmod)}</lastmod>` : undefined,
+    row.changefreq ? `    <changefreq>${xmlEscape(row.changefreq)}</changefreq>` : undefined,
+    row.priority !== undefined ? `    <priority>${xmlEscape(Number(row.priority).toFixed(1))}</priority>` : undefined,
+    alternatesXml || undefined,
+    "  </url>",
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
+
+const renderSitemapXml = (rows) =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
+    ...rows.slice(0, SITEMAP_URL_LIMIT).map(renderSitemapUrl),
+    "</urlset>",
+  ].join("\n");
+
+const renderImageSitemapUrl = (row) => {
+  const alternatesXml = renderAlternateLinks(row.alternates);
+  return [
+    "  <url>",
+    `    <loc>${xmlEscape(row.loc)}</loc>`,
+    row.lastmod ? `    <lastmod>${xmlEscape(row.lastmod)}</lastmod>` : undefined,
+    alternatesXml || undefined,
+    "    <image:image>",
+    `      <image:loc>${xmlEscape(row.image.loc)}</image:loc>`,
+    row.image.title ? `      <image:title>${xmlEscape(row.image.title)}</image:title>` : undefined,
+    "    </image:image>",
+    "  </url>",
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
+
+const renderImageSitemapXml = (rows) =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
+    ...rows.filter((row) => row.image?.loc).slice(0, SITEMAP_URL_LIMIT).map(renderImageSitemapUrl),
+    "</urlset>",
+  ].join("\n");
+
+const renderSitemapIndexXml = (rows) =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...rows.map((row) =>
+      [
+        "  <sitemap>",
+        `    <loc>${xmlEscape(row.loc)}</loc>`,
+        row.lastmod ? `    <lastmod>${xmlEscape(row.lastmod)}</lastmod>` : undefined,
+        "  </sitemap>",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    ),
+    "</sitemapindex>",
+  ].join("\n");
+
+const sitemapChunks = (rows) => {
+  const chunks = [];
+  for (let index = 0; index < rows.length; index += SITEMAP_URL_LIMIT) {
+    chunks.push(rows.slice(index, index + SITEMAP_URL_LIMIT));
+  }
+  return chunks.length > 0 ? chunks : [[]];
+};
+
+const sendXmlSitemap = (res, xml) => {
+  res.status(200);
+  res.set("Content-Type", XML_CONTENT_TYPE);
+  res.set("Cache-Control", "public, max-age=300");
+  res.send(xml);
+};
+
+const isIncludedInSitemap = (entity) =>
+  entity?.seo?.robotsIndex !== false && entity?.seo?.includeInSitemap !== false;
+
+const buildCategorySitemapRows = (categories, req) =>
+  categories
+    .filter(isIncludedInSitemap)
+    .flatMap((category) =>
+      LANGUAGES.flatMap((language) => {
+        const slug = category.translations?.[language]?.slug;
+        if (!slug || !hasTranslation(category, language)) return [];
+        return [{
+          loc: localizedUrl("category", language, slug),
+          language,
+          lastmod: category.updatedAt?.toISOString(),
+          changefreq: category.seo?.sitemapChangeFrequency || "weekly",
+          priority: category.seo?.sitemapPriority ?? 0.7,
+          alternates: alternates(category, "category"),
+          image: category.image ? { loc: getEntityImageUrl(req, "category", category), title: getLocalizedName(category, language) } : undefined,
+        }];
+      })
+    );
+
+const buildProductSitemapRows = (products, req) =>
+  products
+    .filter(isIncludedInSitemap)
+    .flatMap((product) =>
+      LANGUAGES.flatMap((language) => {
+        const slug = product.translations?.[language]?.slug;
+        if (!slug || !hasTranslation(product, language)) return [];
+        return [{
+          loc: localizedUrl("product", language, slug),
+          language,
+          lastmod: product.updatedAt?.toISOString(),
+          changefreq: product.seo?.sitemapChangeFrequency || "weekly",
+          priority: product.seo?.sitemapPriority ?? 0.8,
+          alternates: alternates(product, "product"),
+          image: product.image ? { loc: getEntityImageUrl(req, "product", product), title: getLocalizedName(product, language) } : undefined,
+        }];
+      })
+    );
 
 const buildSeo = ({ entity, entityType, language, imageUrl }) => {
   const localized = getLocalized(entity, language);
@@ -512,20 +663,7 @@ const sitemapRowsFor = async (entityType, req) => {
       "seo.robotsIndex": { $ne: false },
       "seo.includeInSitemap": { $ne: false },
     }).lean();
-    return categories.flatMap((category) =>
-      LANGUAGES.flatMap((language) => {
-        const slug = category.translations?.[language]?.slug;
-        if (!slug || !hasTranslation(category, language)) return [];
-        return [{
-          loc: localizedUrl("category", language, slug),
-          lastmod: category.updatedAt?.toISOString(),
-          changefreq: category.seo?.sitemapChangeFrequency || "weekly",
-          priority: category.seo?.sitemapPriority ?? 0.7,
-          alternates: alternates(category, "category"),
-          image: category.image ? { loc: getEntityImageUrl(req, "category", category), title: getLocalizedName(category, language) } : undefined,
-        }];
-      })
-    );
+    return buildCategorySitemapRows(categories, req);
   }
 
   const activeProductIds = await getActiveProductIds();
@@ -534,20 +672,7 @@ const sitemapRowsFor = async (entityType, req) => {
     "seo.robotsIndex": { $ne: false },
     "seo.includeInSitemap": { $ne: false },
   }).lean();
-  return products.flatMap((product) =>
-    LANGUAGES.flatMap((language) => {
-      const slug = product.translations?.[language]?.slug;
-      if (!slug || !hasTranslation(product, language)) return [];
-      return [{
-        loc: localizedUrl("product", language, slug),
-        lastmod: product.updatedAt?.toISOString(),
-        changefreq: product.seo?.sitemapChangeFrequency || "weekly",
-        priority: product.seo?.sitemapPriority ?? 0.8,
-        alternates: alternates(product, "product"),
-        image: product.image ? { loc: getEntityImageUrl(req, "product", product), title: getLocalizedName(product, language) } : undefined,
-      }];
-    })
-  );
+  return buildProductSitemapRows(products, req);
 };
 
 const paginateRows = (rows, req, res) => {
@@ -568,6 +693,96 @@ const getSitemapImages = asyncHandler(async (req, res) => {
     .filter((row) => row.image)
     .map((row) => ({ loc: row.loc, lastmod: row.lastmod, alternates: row.alternates, image: row.image }));
   paginateRows(rows, req, res);
+});
+
+const pageSitemapRowsForLanguage = (language) => [
+  {
+    loc: `${getWebsiteOrigin()}/${language}`,
+    language,
+    lastmod: undefined,
+    changefreq: "daily",
+    priority: 1.0,
+    alternates: {
+      ar: `${getWebsiteOrigin()}/ar`,
+      en: `${getWebsiteOrigin()}/en`,
+      xDefault: `${getWebsiteOrigin()}/ar`,
+    },
+  },
+];
+
+const getSitemapXmlPages = (language) =>
+  asyncHandler(async (_req, res) => {
+    sendXmlSitemap(res, renderSitemapXml(pageSitemapRowsForLanguage(language)));
+  });
+
+const getSitemapXmlCategories = (language) =>
+  asyncHandler(async (req, res) => {
+    const rows = sitemapRowsForLanguage(await sitemapRowsFor("category", req), language);
+    sendXmlSitemap(res, renderSitemapXml(rows));
+  });
+
+const getSitemapXmlProducts = (language) =>
+  asyncHandler(async (req, res) => {
+    const rows = sitemapRowsForLanguage(await sitemapRowsFor("product", req), language);
+    sendXmlSitemap(res, renderSitemapXml(rows));
+  });
+
+const getSitemapChunk = (rows, req) => {
+  const page = Math.max(1, Number.parseInt(req.params.page || "1", 10) || 1);
+  return sitemapChunks(rows)[page - 1] || [];
+};
+
+const getSitemapXmlCategoriesChunk = (language) =>
+  asyncHandler(async (req, res) => {
+    const rows = sitemapRowsForLanguage(await sitemapRowsFor("category", req), language);
+    sendXmlSitemap(res, renderSitemapXml(getSitemapChunk(rows, req)));
+  });
+
+const getSitemapXmlProductsChunk = (language) =>
+  asyncHandler(async (req, res) => {
+    const rows = sitemapRowsForLanguage(await sitemapRowsFor("product", req), language);
+    sendXmlSitemap(res, renderSitemapXml(getSitemapChunk(rows, req)));
+  });
+
+const getSitemapXmlImages = asyncHandler(async (req, res) => {
+  const rows = [...(await sitemapRowsFor("category", req)), ...(await sitemapRowsFor("product", req))]
+    .filter((row) => row.image?.loc)
+    .map((row) => ({ loc: row.loc, lastmod: row.lastmod, alternates: row.alternates, image: row.image }));
+  sendXmlSitemap(res, renderImageSitemapXml(rows));
+});
+
+const getSitemapXmlImagesChunk = asyncHandler(async (req, res) => {
+  const rows = [...(await sitemapRowsFor("category", req)), ...(await sitemapRowsFor("product", req))]
+    .filter((row) => row.image?.loc)
+    .map((row) => ({ loc: row.loc, lastmod: row.lastmod, alternates: row.alternates, image: row.image }));
+  sendXmlSitemap(res, renderImageSitemapXml(getSitemapChunk(rows, req)));
+});
+
+const getSitemapXmlIndex = asyncHandler(async (req, res) => {
+  const [categoryRows, productRows] = await Promise.all([
+    sitemapRowsFor("category", req),
+    sitemapRowsFor("product", req),
+  ]);
+  const imageRows = [...categoryRows, ...productRows].filter((row) => row.image?.loc);
+  const sitemapEntries = [
+    { name: "pages-ar", count: 1 },
+    { name: "pages-en", count: 1 },
+    { name: "categories-ar", count: sitemapRowsForLanguage(categoryRows, "ar").length },
+    { name: "categories-en", count: sitemapRowsForLanguage(categoryRows, "en").length },
+    { name: "products-ar", count: sitemapRowsForLanguage(productRows, "ar").length },
+    { name: "products-en", count: sitemapRowsForLanguage(productRows, "en").length },
+    { name: "images", count: imageRows.length },
+  ].flatMap(({ name, count }) => {
+    const chunkCount = Math.max(1, Math.ceil(count / SITEMAP_URL_LIMIT));
+    return Array.from({ length: chunkCount }, (_item, index) => ({
+      loc:
+        chunkCount === 1
+          ? `${getPublicApiOrigin(req)}/api/public/seo/sitemaps/${name}.xml`
+          : `${getPublicApiOrigin(req)}/api/public/seo/sitemaps/${name}-${index + 1}.xml`,
+      lastmod: new Date().toISOString(),
+    }));
+  });
+  sendXmlSitemap(res, renderSitemapIndexXml(sitemapEntries));
 });
 
 const getCategoryImage = asyncHandler(async (req, res) => {
@@ -591,14 +806,36 @@ module.exports = {
   getSitemapCategories,
   getSitemapProducts,
   getSitemapImages,
+  getSitemapXmlPagesAr: getSitemapXmlPages("ar"),
+  getSitemapXmlPagesEn: getSitemapXmlPages("en"),
+  getSitemapXmlCategoriesAr: getSitemapXmlCategories("ar"),
+  getSitemapXmlCategoriesEn: getSitemapXmlCategories("en"),
+  getSitemapXmlProductsAr: getSitemapXmlProducts("ar"),
+  getSitemapXmlProductsEn: getSitemapXmlProducts("en"),
+  getSitemapXmlCategoriesArChunk: getSitemapXmlCategoriesChunk("ar"),
+  getSitemapXmlCategoriesEnChunk: getSitemapXmlCategoriesChunk("en"),
+  getSitemapXmlProductsArChunk: getSitemapXmlProductsChunk("ar"),
+  getSitemapXmlProductsEnChunk: getSitemapXmlProductsChunk("en"),
+  getSitemapXmlImages,
+  getSitemapXmlImagesChunk,
+  getSitemapXmlIndex,
   getCategoryImage,
   getProductImage,
   _private: {
     buildPublicProductSearchQuery,
     buildPublicProductSearchRegexes,
+    buildCategorySitemapRows,
+    buildProductSitemapRows,
     getPublicProductSearchTerm,
     getPublicProductSearchRelevance,
     normalizeArabicSearchText,
+    pageSitemapRowsForLanguage,
+    renderImageSitemapXml,
+    renderSitemapIndexXml,
+    renderSitemapXml,
+    sitemapChunks,
+    sitemapRowsForLanguage,
     sortProductsByPublicSearchRelevance,
+    xmlEscape,
   },
 };

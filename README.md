@@ -106,6 +106,35 @@ npm start
 
 ## API Endpoints
 
+### Public SEO And Sitemaps
+
+JSON sitemap data remains available for API consumers:
+- `GET /api/public/seo/sitemap/pages`
+- `GET /api/public/seo/sitemap/categories`
+- `GET /api/public/seo/sitemap/products`
+- `GET /api/public/seo/sitemap/images`
+
+Production XML sitemap files:
+- `GET /api/public/seo/sitemaps/pages-ar.xml`
+- `GET /api/public/seo/sitemaps/pages-en.xml`
+- `GET /api/public/seo/sitemaps/categories-ar.xml`
+- `GET /api/public/seo/sitemaps/categories-en.xml`
+- `GET /api/public/seo/sitemaps/products-ar.xml`
+- `GET /api/public/seo/sitemaps/products-en.xml`
+- `GET /api/public/seo/sitemaps/images.xml`
+- `GET /api/public/seo/sitemaps/sitemap-index.xml`
+
+If a category, product, or image sitemap grows beyond 50,000 URLs, the sitemap index points crawlers at chunked files such as:
+- `GET /api/public/seo/sitemaps/products-ar-1.xml`
+- `GET /api/public/seo/sitemaps/products-ar-2.xml`
+- `GET /api/public/seo/sitemaps/images-1.xml`
+
+Required public URL environment variables:
+- `WEBSITE_ORIGIN`: canonical website origin, for example `https://kapomatic.com`.
+- `PUBLIC_API_ORIGIN`: public API origin used for image sitemap URLs, for example `https://api.kapomatic.com`.
+
+If `WEBSITE_ORIGIN` is missing or points to localhost, sitemap URL generation falls back to `https://kapomatic.com`. If `PUBLIC_API_ORIGIN` is missing or points to localhost, image URLs fall back to the public website origin. Sitemap XML responses use `application/xml; charset=utf-8`, the official sitemap namespace, `xhtml:link` alternates, and the Google image sitemap namespace for `images.xml`.
+
 ### Categories
 - `GET /api/categories`
 - `GET /api/categories/export`
