@@ -66,6 +66,7 @@ test("Arabic regex tolerates Alef variants, diacritics, and tatweel", () => {
 
   assert.equal(regexes.some((regex) => regex.test("آبـار")), true);
   assert.equal(regexes.some((regex) => regex.test("أبار")), true);
+  assert.equal(regexes.some((regex) => regex.source.includes("\\u")), false);
 });
 
 test("relevance works for partial names, case-insensitive English, Arabic, and product code", () => {

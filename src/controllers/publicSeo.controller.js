@@ -304,7 +304,7 @@ const buildArabicSearchPattern = (value) =>
   normalizeArabicSearchText(value)
     .split("")
     .map(arabicRegexCharacter)
-    .join("[\\u064B-\\u065F\\u0670ـ]*");
+    .join("[ً-ٰٟـ]*");
 
 const buildPublicProductSearchRegexes = (searchTerm) => {
   const regexes = [new RegExp(escapeRegex(searchTerm), "i")];
