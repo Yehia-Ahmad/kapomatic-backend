@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const isBase64Image = require("./isBase64Image");
 
 const LANGUAGES = ["ar", "en"];
 const SITEMAP_FREQUENCIES = ["always", "hourly", "daily", "weekly", "monthly", "yearly", "never"];
@@ -313,8 +314,22 @@ const getWebsiteOrigin = () => normalizePublicOrigin(process.env.WEBSITE_ORIGIN,
 const getPublicApiOrigin = (req) =>
   normalizePublicOrigin(process.env.PUBLIC_API_ORIGIN || getRequestOrigin(req), getWebsiteOrigin());
 const absoluteApiUrl = (req, path) => `${getPublicApiOrigin(req)}${path}`;
-const getEntityImageUrl = (req, entityType, entity) =>
-  entity?.image ? absoluteApiUrl(req, `/api/public/images/${entityType}s/${entity._id}`) : undefined;
+const getEntityImageUrl = (req, entityType, entity) => {
+  const image = typeof entity?.image === "string" ? entity.image.trim() : "";
+  if (!image) return undefined;
+
+  try {
+    const url = new URL(image);
+    if (url.protocol === "http:" || url.protocol === "https:") return image;
+  } catch (_error) {
+    // Category and product images are normally stored as base64, not URLs.
+  }
+
+  const imageCollection = entityType === "category" ? "categories" : "products";
+  return isBase64Image(image)
+    ? absoluteApiUrl(req, `/api/public/images/${imageCollection}/${entity._id}`)
+    : undefined;
+};
 
 const cacheGet = (key) => {
   const item = publicCache.get(key);

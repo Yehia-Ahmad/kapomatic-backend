@@ -135,6 +135,68 @@ Required public URL environment variables:
 
 If `WEBSITE_ORIGIN` is missing or points to localhost, sitemap URL generation falls back to `https://kapomatic.com`. If `PUBLIC_API_ORIGIN` is missing or points to localhost, image URLs fall back to the public website origin. Sitemap XML responses use `application/xml; charset=utf-8`, the official sitemap namespace, `xhtml:link` alternates, and the Google image sitemap namespace for `images.xml`.
 
+### Public Home Categories
+
+- `GET /api/public/:lang/categories/home?limit=12`
+- `lang` is required and accepts only `ar` or `en`.
+- `limit` is optional, defaults to `12`, must be a positive integer, and is capped at `50`.
+- The endpoint is public and does not require an access token.
+
+Successful response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "categories": [
+      {
+        "id": "66b0b7b5a8c197aa0adf1234",
+        "name": "قطع غيار ناقل الحركة",
+        "slug": "قطع-غيار-ناقل-الحركة",
+        "localizedSlugs": {
+          "ar": "قطع-غيار-ناقل-الحركة",
+          "en": "transmission-parts"
+        },
+        "image": {
+          "url": "https://api.kapomatic.com/api/public/images/categories/66b0b7b5a8c197aa0adf1234",
+          "alt": "قطع غيار ناقل الحركة"
+        },
+        "productsCount": 24
+      }
+    ]
+  }
+}
+```
+
+Eligibility and ordering rules:
+
+- Categories must be present in the ordered `GeneralSetting.homePageCategoryIds` Home configuration.
+- Categories must have an `EcommerceSetting` with `showOnWebsite: true`.
+- The requested language must have a stored, non-empty translation name and slug. Slugs are never generated or transliterated by this endpoint. A missing alternate slug is returned as `null`.
+- The Category and Product schemas do not define separate active, archive, or soft-delete fields. Deleted records are physically absent and therefore excluded by the aggregate joins.
+- Home order is exactly the order of `homePageCategoryIds`. Hidden, deleted, or untranslated entries are removed without changing the relative order of the remaining entries.
+- A configured and visible Category is retained when `productsCount` is `0`; its explicit Home configuration is treated as intentional.
+
+`productsCount` uses the existing storefront availability rule. A Product is counted only when its `_id` is in that visible Category setting's `selectedProducts` and its direct `Product.category` reference matches the Category. Products not selected for the Website and physically deleted Products are excluded. The data model has no subcategory or variant relation, so no descendants or variants are added to the count. One MongoDB aggregation performs the Category, visibility, and Product-count joins; the endpoint does not issue one Products query per Category.
+
+Category images are normally stored as validated base64 and are returned through the existing `/api/public/images/categories/:id` route. A valid stored absolute HTTP(S) URL is preserved. Missing or invalid images return `null`; server filesystem paths are never returned.
+
+Validation errors use HTTP `400`, for example:
+
+```json
+{
+  "message": "قيمة اللغة غير صالحة"
+}
+```
+
+Database/server failures use HTTP `500` with a generic message and are not converted to an empty successful response:
+
+```json
+{
+  "message": "تعذر تحميل فئات الصفحة الرئيسية"
+}
+```
+
 ### Categories
 - `GET /api/categories`
 - `GET /api/categories/export`
@@ -715,4 +777,11 @@ Sample selling invoice from `GET /api/sellings`:
     }
   ]
 }
-```
+```systemctl status mongod
+sudo systemctl start mongod
+
+uname -r  6.17.9-76061709-generic
+
+sudo systemctl restart mongod
+systemctl is-active mongod
+npm run dev

@@ -3037,6 +3037,73 @@
           "response": []
         },
         {
+          "name": "Get Arabic Home Categories",
+          "request": {
+            "method": "GET",
+            "description": "Public endpoint for the storefront Browse Categories section. Replace ar with en for English. lang accepts ar or en. limit is optional (default 12), must be a positive integer, and is capped at 50. Categories must be in the ordered Home configuration, have showOnWebsite=true, and have a stored name and slug for the requested language. Zero-product Categories remain visible when intentionally configured. productsCount includes only direct-category Products selected in that Category's visible EcommerceSetting; deleted or unselected Products are excluded. Base64 images resolve through the public Category image endpoint, valid absolute URLs are preserved, and missing/invalid images return null. No authentication is required. Invalid language/limit returns 400; database failures return 500 with a generic message.",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/ar/categories/home?limit=12",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "ar",
+                "categories",
+                "home"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "12",
+                  "description": "Optional positive integer; defaults to 12 and is capped at 50."
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Arabic Home Categories",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/public/ar/categories/home?limit=12",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "public",
+                    "ar",
+                    "categories",
+                    "home"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "12"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"categories\": [\n      {\n        \"id\": \"66b0b7b5a8c197aa0adf1234\",\n        \"name\": \"قطع غيار ناقل الحركة\",\n        \"slug\": \"قطع-غيار-ناقل-الحركة\",\n        \"localizedSlugs\": {\n          \"ar\": \"قطع-غيار-ناقل-الحركة\",\n          \"en\": \"transmission-parts\"\n        },\n        \"image\": {\n          \"url\": \"https://api.kapomatic.com/api/public/images/categories/66b0b7b5a8c197aa0adf1234\",\n          \"alt\": \"قطع غيار ناقل الحركة\"\n        },\n        \"productsCount\": 24\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
           "name": "Get Arabic Category By Slug",
           "request": {
             "method": "GET",

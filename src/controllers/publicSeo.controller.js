@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Category = require("../models/category.model");
 const EcommerceSetting = require("../models/ecommerceSetting.model");
+const GeneralSetting = require("../models/generalSetting.model");
 const Product = require("../models/product.model");
 const ShippingSetting = require("../models/shippingSetting.model");
 const asyncHandler = require("../utils/asyncHandler");
@@ -42,6 +43,8 @@ const PRODUCT_SEARCH_FIELDS = [
 ];
 const XML_CONTENT_TYPE = "application/xml; charset=utf-8";
 const SITEMAP_URL_LIMIT = 50_000;
+const HOME_CATEGORIES_DEFAULT_LIMIT = 12;
+const HOME_CATEGORIES_MAX_LIMIT = 50;
 
 const getLocalized = (entity, language) => entity?.translations?.[language] || {};
 const hasTranslation = (entity, language) => Boolean(getLocalized(entity, language).name && getLocalized(entity, language).slug);
@@ -64,6 +67,143 @@ const localizedUrl = (entityType, language, slug) =>
 
 const getLocalizedSlug = (entity, language) =>
   getLocalized(entity, language).slug || (language === "ar" ? String(entity._id) : undefined);
+
+const getHomeCategoriesLimit = (value, res) => {
+  if (value === undefined || value === "") return HOME_CATEGORIES_DEFAULT_LIMIT;
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim())) {
+    res.status(400);
+    throw new Error("قيمة limit غير صالحة");
+  }
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    res.status(400);
+    throw new Error("قيمة limit غير صالحة");
+  }
+
+  return Math.min(parsed, HOME_CATEGORIES_MAX_LIMIT);
+};
+
+const buildHomeProductCountsPipeline = (categoryIds, productIds) => [
+  {
+    $match: {
+      _id: { $in: productIds },
+      category: { $in: categoryIds },
+    },
+  },
+  { $group: { _id: "$category", count: { $sum: 1 } } },
+];
+
+const orderHomeCategories = (categories, configuredCategoryIds) => {
+  if (!configuredCategoryIds.length) return categories;
+
+  const categoriesById = new Map(
+    categories.map((category) => [String(category._id), category])
+  );
+  return configuredCategoryIds.flatMap((categoryId) => {
+    const category = categoriesById.get(String(categoryId));
+    return category ? [category] : [];
+  });
+};
+
+const serializeHomeCategory = (req, category, language) => {
+  const localized = getLocalized(category, language);
+  const name = getLocalizedName(category, language);
+  const imageUrl = getEntityImageUrl(req, "category", category);
+
+  return {
+    id: String(category._id),
+    name,
+    slug: getLocalizedSlug(category, language),
+    localizedSlugs: {
+      ar: getLocalizedSlug(category, "ar") || null,
+      en: category.translations?.en?.slug || null,
+    },
+    image: imageUrl
+      ? {
+          url: imageUrl,
+          alt: localized.imageAlt || name,
+        }
+      : null,
+    productsCount: Number(category.productsCount || 0),
+  };
+};
+
+const loadHomeCategories = async (language, limit) => {
+  const [generalSetting, activeSettings] = await Promise.all([
+    GeneralSetting.findOne({ key: "default" })
+      .select("homePageCategoryIds")
+      .lean(),
+    EcommerceSetting.find({ showOnWebsite: true })
+      .select("category selectedProducts")
+      .lean(),
+  ]);
+
+  if (activeSettings.length === 0) return [];
+
+  const activeSettingsByCategory = new Map(
+    activeSettings.map((setting) => [String(setting.category), setting])
+  );
+  const categories = await Category.find({
+    _id: { $in: activeSettings.map((setting) => setting.category) },
+  })
+    .sort({ createdAt: 1, _id: 1 })
+    .lean();
+  const localizedCategories = categories.filter((category) =>
+    hasPublicLocalizedValue(category, language)
+  );
+  const configuredCategoryIds = generalSetting?.homePageCategoryIds || [];
+  const orderedCategories = orderHomeCategories(
+    localizedCategories,
+    configuredCategoryIds
+  ).slice(0, limit);
+
+  if (orderedCategories.length === 0) return [];
+
+  const categoryIds = orderedCategories.map((category) => category._id);
+  const publicProductIds = orderedCategories.flatMap(
+    (category) =>
+      activeSettingsByCategory.get(String(category._id))?.selectedProducts || []
+  );
+  const productCounts =
+    publicProductIds.length > 0
+      ? await Product.aggregate(
+          buildHomeProductCountsPipeline(categoryIds, publicProductIds)
+        )
+      : [];
+  const productCountsByCategory = new Map(
+    productCounts.map((row) => [String(row._id), Number(row.count || 0)])
+  );
+
+  return orderedCategories.map((category) => ({
+    ...category,
+    productsCount: productCountsByCategory.get(String(category._id)) || 0,
+  }));
+};
+
+const getHomeCategories = asyncHandler(async (req, res) => {
+  const { language } = req.params;
+  assertLanguage(language, res);
+  const limit = getHomeCategoriesLimit(req.query.limit, res);
+
+  let categories;
+  try {
+    categories = await loadHomeCategories(language, limit);
+  } catch (_error) {
+    const error = new Error("تعذر تحميل فئات الصفحة الرئيسية");
+    error.statusCode = 500;
+    throw error;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      categories: categories.map((category) =>
+        serializeHomeCategory(req, category, language)
+      ),
+    },
+  });
+});
 
 const alternates = (entity, entityType) => {
   const ar = getLocalizedSlug(entity, "ar");
@@ -797,6 +937,7 @@ const getProductImage = asyncHandler(async (req, res) => {
 
 module.exports = {
   getSlugAvailability,
+  getHomeCategories,
   getLocalizedCategory,
   getLocalizedCategoryProducts,
   getLocalizedProduct,
@@ -822,11 +963,13 @@ module.exports = {
   getCategoryImage,
   getProductImage,
   _private: {
+    buildHomeProductCountsPipeline,
     buildPublicProductSearchQuery,
     buildPublicProductSearchRegexes,
     buildCategorySitemapRows,
     buildProductSitemapRows,
     getPublicProductSearchTerm,
+    getHomeCategoriesLimit,
     getPublicProductSearchRelevance,
     normalizeArabicSearchText,
     pageSitemapRowsForLanguage,
@@ -836,6 +979,9 @@ module.exports = {
     sitemapChunks,
     sitemapRowsForLanguage,
     sortProductsByPublicSearchRelevance,
+    loadHomeCategories,
+    orderHomeCategories,
+    serializeHomeCategory,
     xmlEscape,
   },
 };

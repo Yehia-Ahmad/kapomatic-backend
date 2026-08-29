@@ -1,6 +1,7 @@
 const express = require("express");
 const {
   getCategoryImage,
+  getHomeCategories,
   getLocalizedCategory,
   getLocalizedCategoryProducts,
   getLocalizedProduct,
@@ -50,6 +51,7 @@ router.get("/images/products/:id", getProductImage);
 router.get("/products/search", searchLocalizedProducts);
 // Deprecated compatibility aliases. New clients should use /api/public/products/search.
 router.get("/:language/products/search", searchLocalizedProducts);
+router.get("/:language/categories/home", getHomeCategories);
 router.get("/:language/categories/:slug/products", getLocalizedCategoryProducts);
 router.get("/:language/categories/:slug", getLocalizedCategory);
 router.get("/:language/products/:slug", getLocalizedProduct);
